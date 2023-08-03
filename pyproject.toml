@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "auc-measurement"
+version = "0.1.0"
+description = ""
+authors = ["Heather Lane <hlane@athenahealth.com>"]
+readme = "README.md"
+packages = [{include = "auc_measurement"}]
+
+[tool.poetry.dependencies]
+python = ">=3.9,<3.13"
+ipython = "^8.14.0"
+jupyterlab = "^4.0.3"
+numpy = "^1.25.2"
+scipy = "^1.11.1"
+seaborn = "^0.12.2"
+scikit-learn = "^1.3.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
