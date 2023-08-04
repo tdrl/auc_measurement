@@ -5,7 +5,7 @@
         "diabetes"
     ],
     "models_to_test": {
-        "ridge_classifier": { "alpha": 0.3, "solver": "svd" }
+        "logistic": {}
     },
     "small_data": {
         "folds": 10
