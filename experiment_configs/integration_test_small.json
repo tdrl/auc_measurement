@@ -2,7 +2,7 @@
     "experiments_output_dir": "/tmp/heather/expt_integration_small",
     "datasets": [
         "iris",
-        "diabetes"
+        "wine"
     ],
     "models_to_test": {
         "logistic": {}

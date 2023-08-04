@@ -10,6 +10,8 @@ from dataclasses_json import dataclass_json
 import logging
 from sklearn.utils import Bunch
 from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
 from joblib import dump  # type: ignore
 
 from auc_measurement.dir_stack import dir_stack_push
@@ -63,7 +65,7 @@ def run_one_model(X, y, cv_splits, model):
             dump(model, 'model.joblib')
             dump(y[test], 'ground_truth_labels.joblib')
             logging.info('    Predicting on test fold...')
-            dump(model.predict_proba(X[test]), 'predictions.joblib')
+            dump(model.decision_function(X[test]), 'predictions.joblib')
             logging.info('    Done.')
             mark_complete()
 
@@ -91,7 +93,9 @@ def run_single_expt(config: Config, dataset: Bunch):
             model = MODEL_REGISTRY[model_name](**params, random_state=config.random_seed)
             with open('model_params.json', 'w') as params_out:
                 json.dump(model.get_params(), params_out, indent=2)
-            run_one_model(X=X, y=y, cv_splits=cv_splits, model=model)
+            pipeline = Pipeline([('PreprocessScaleData', StandardScaler()),
+                                 (f'Model_{model_name}', model)])
+            run_one_model(X=X, y=y, cv_splits=cv_splits, model=pipeline)
             mark_complete()
     mark_complete()
 
