@@ -8,14 +8,18 @@ from typing import Dict, Union, List
 from dataclasses import dataclass, field
 from dataclasses_json import dataclass_json
 import logging
+import numpy as np
+from sklearn.base import ClassifierMixin
 from sklearn.utils import Bunch
 from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
+import sklearn.metrics as metrics
 from joblib import dump  # type: ignore
 
 from auc_measurement.dir_stack import dir_stack_push
 from auc_measurement.registries import DATA_LOADER_REGISTRY, MODEL_REGISTRY
+from auc_measurement.scores import Scores
 
 
 @dataclass_json
@@ -52,6 +56,34 @@ def is_complete() -> bool:
     return Path('.complete').exists()
 
 
+def score_predictions(y_true: np.ndarray, y_predicted: np.ndarray) -> Scores:
+    roc_fpr, roc_tpr, roc_thresholds = metrics.roc_curve(y_true=y_true, y_score=y_predicted)
+    return Scores(
+        auc=metrics.roc_auc_score(y_true=y_true, y_score=y_predicted),
+        f1=metrics.f1_score(y_true=y_true, y_pred=y_predicted),
+        accuracy=metrics.accuracy_score(y_true=y_true, y_pred=y_predicted),
+        roc_fpr=roc_fpr,
+        roc_tpr=roc_tpr,
+        roc_thresholds=roc_thresholds
+    )
+
+
+def do_predict(model: ClassifierMixin, X: np.ndarray) -> np.ndarray:
+    """Figure out whether to use decision_function or predict_proba.
+
+    Args:
+        model (_type_): Classifier model.
+        X (_type_): Data feature set.
+
+    Returns:
+        _type_: Predicted confidence/margin/soft values.
+    """
+    if hasattr(model, 'decision_function'):
+        return model.decision_function(X)  # type: ignore
+    else:
+        return model.predict_proba(X)  # type: ignore
+
+
 def run_one_model(X, y, cv_splits, model):
     for idx, (train, test) in enumerate(cv_splits):
         logging.info(f'    Doing split {idx}')
@@ -65,7 +97,11 @@ def run_one_model(X, y, cv_splits, model):
             dump(model, 'model.joblib')
             dump(y[test], 'ground_truth_labels.joblib')
             logging.info('    Predicting on test fold...')
-            dump(model.decision_function(X[test]), 'predictions.joblib')
+            y_predicted = do_predict(model=model, X=X[test])
+            dump(y_predicted, 'predictions.joblib')
+            scores = score_predictions(y_true=y[test], y_predicted=y_predicted)
+            with open('final_scores.json', 'w') as scores_out:
+                scores_out.write(scores.to_json(indent=2))  # type: ignore
             logging.info('    Done.')
             mark_complete()
 
