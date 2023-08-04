@@ -3,19 +3,17 @@
 
 from pathlib import Path
 from sys import argv
-from config_schema import get_config_schema
 import json
-from jsonschema import validate
 from typing import Dict, Union, List
 from dataclasses import dataclass, field
 from dataclasses_json import dataclass_json
 import logging
 from sklearn.utils import Bunch
 from sklearn.model_selection import StratifiedShuffleSplit
-from joblib import dump
+from joblib import dump  # type: ignore
 
-from dir_stack import dir_stack_push
-from registries import DATA_LOADER_REGISTRY, MODEL_REGISTRY
+from auc_measurement.dir_stack import dir_stack_push
+from auc_measurement.registries import DATA_LOADER_REGISTRY, MODEL_REGISTRY
 
 
 @dataclass_json
@@ -28,7 +26,7 @@ class ExptParams:
 @dataclass
 class Config:
     experiments_output_dir: str
-    random_seed: int = 69
+    random_seed: int = 3263827
     large_data_threshold: int = 10000
     datasets: List[str] = field(default_factory=list)
     models_to_test: Dict[str, Dict[str, Union[str, int, float, bool]]] = field(default_factory=dict)
@@ -36,12 +34,12 @@ class Config:
     large_data: ExptParams = field(default_factory=ExptParams)
 
 
-def load_config(config_fname: str) -> Config:
+def load_config(config_fname: Union[str, Path]) -> Config:
     # Note: There _seems_ to be a bug in dataclass_json that infers the wrong type
     # for a highly nested field, so it fails to deserialze bool model parameters
     # correctly. We'll skip this for the moment until/unless we need such a param.
     with open(config_fname, 'r') as raw:
-        return Config.schema().loads(raw.read())
+        return Config.schema().loads(raw.read())  # type: ignore
 
 
 def run_one_model(X, y, cv_splits, model):
@@ -112,7 +110,7 @@ def main(config=None):
                  config.experiments_output_dir)
     with dir_stack_push(expt_dir, force_create=True) as _:
         with open('config.json', 'w') as config_out:
-            config_out.write(config.to_json(indent=2))
+            config_out.write(config.to_json(indent=2))  # type: ignore
         run_all_expts(config=config)
 
 
