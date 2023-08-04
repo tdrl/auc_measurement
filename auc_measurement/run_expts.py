@@ -3,8 +3,6 @@
 
 from pathlib import Path
 from sys import argv
-from os import chdir
-from typing import Optional
 from config_schema import get_config_schema
 import json
 from jsonschema import validate
@@ -15,6 +13,7 @@ from sklearn.datasets import (
     load_breast_cancer,
     load_diabetes,
 )
+from dir_stack import dir_stack_push
 
 
 @dataclass
@@ -30,29 +29,22 @@ def load_config(config_fname: str) -> Config:
         return Config(**config)
 
 
-
-
-
 def run_all_expts(config: Config):
-    work_dir = Path(config.experiments_output_dir)
-    dir_stack = DirStack()
-    dir_stack.pushd(work_dir)
     loaders = [
         load_iris,
-        # load_diabetes,
-        # load_breast_cancer
+        load_diabetes,
+        load_breast_cancer
     ]
     for loader in loaders:
         logging.info('Doing %s', loader.__name__)
         dataset_name = loader.__name__.removeprefix('load_')
-        expt_dir = Path.cwd() / dataset_name
-        expt_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            dir_stack.pushd(expt_dir)
+        with dir_stack_push(Path.cwd() / dataset_name, force_create=True) as expt_dir:
+            logging.info(f'Created experiment directory for dataset {dataset_name} at {expt_dir}')
             bunch = loader()
-        finally:
-
-
+            with open('dataset_descr.txt', 'w') as descr_out:
+                descr_out.write(bunch['DESCR'])
+            with open('dataset_name.txt', 'w') as name_out:
+                name_out.write(dataset_name + '\n')
 
 
 def main(config=None):
@@ -71,8 +63,8 @@ def main(config=None):
     expt_dir = Path(config.experiments_output_dir)
     logging.info('Creating experiment output dir at %s',
                  config.experiments_output_dir)
-    expt_dir.mkdir(parents=True, exist_ok=False)
-    run_all_expts(config=config)
+    with dir_stack_push(expt_dir, force_create=True) as _:
+        run_all_expts(config=config)
 
 
 if __name__ == '__main__':
