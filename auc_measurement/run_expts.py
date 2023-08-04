@@ -4,7 +4,7 @@
 from pathlib import Path
 from sys import argv
 from os import chdir
-# from typing import Dict, Union, List
+from typing import Optional
 from config_schema import get_config_schema
 import json
 from jsonschema import validate
@@ -30,16 +30,29 @@ def load_config(config_fname: str) -> Config:
         return Config(**config)
 
 
+
+
+
 def run_all_expts(config: Config):
     work_dir = Path(config.experiments_output_dir)
-    chdir(work_dir)
+    dir_stack = DirStack()
+    dir_stack.pushd(work_dir)
     loaders = [
         load_iris,
-        load_diabetes,
-        load_breast_cancer
+        # load_diabetes,
+        # load_breast_cancer
     ]
     for loader in loaders:
         logging.info('Doing %s', loader.__name__)
+        dataset_name = loader.__name__.removeprefix('load_')
+        expt_dir = Path.cwd() / dataset_name
+        expt_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            dir_stack.pushd(expt_dir)
+            bunch = loader()
+        finally:
+
+
 
 
 def main(config=None):
