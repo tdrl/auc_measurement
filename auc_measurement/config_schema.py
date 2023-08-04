@@ -10,7 +10,21 @@ _config_schema = {
     'properties': {
         'experiments_output_dir': {
             'description': 'Destination directory for experiments. Created if it doesn''t exist already.',
-            'type': 'string'
+            'type': 'string',
+        },
+        'large_data_threshold': {
+            'description': 'How many rows for a dataset to be considered "large". Large datasets will receive fewer xval folds than small ones.',
+            'type': 'integer',
+        },
+        'small_data': {
+            'description': 'Parameters that apply to small data sets.',
+            'type': 'object',
+            'properties': {
+                'folds': {
+                    'description': 'Number of cross-validation folds for test.',
+                    'type': 'integer',
+                }
+            }
         }
     },
     'required': [
