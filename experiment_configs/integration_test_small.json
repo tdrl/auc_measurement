@@ -1,0 +1,16 @@
+{
+    "experiments_output_dir": "/tmp/heather/expt_integration_small",
+    "datasets": [
+        "iris",
+        "diabetes"
+    ],
+    "models_to_test": {
+        "ridge_classifier": { "alpha": 0.3, "solver": "svd" }
+    },
+    "small_data": {
+        "folds": 10
+    },
+    "large_data": {
+        "folds": 2
+    }
+}

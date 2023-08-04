@@ -29,6 +29,16 @@ _config_schema = {
                     'type': 'integer',
                 }
             }
+        },
+        'large_data': {
+            'description': 'Parameters that apply to large data sets.',
+            'type': 'object',
+            'properties': {
+                'folds': {
+                    'description': 'Number of cross-validation folds for test.',
+                    'type': 'integer',
+                }
+            }
         }
     },
     'required': [
