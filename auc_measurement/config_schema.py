@@ -12,6 +12,10 @@ _config_schema = {
             'description': 'Destination directory for experiments. Created if it doesn''t exist already.',
             'type': 'string',
         },
+        'random_seed': {
+            'description': 'An integer random seed value, as used by sklearn functions.',
+            'type': 'integer',
+        },
         'large_data_threshold': {
             'description': 'How many rows for a dataset to be considered "large". Large datasets will receive fewer xval folds than small ones.',
             'type': 'integer',
