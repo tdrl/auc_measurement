@@ -16,10 +16,12 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 import sklearn.metrics as metrics
 from joblib import dump  # type: ignore
+from datetime import datetime
 
 from auc_measurement.dir_stack import dir_stack_push
 from auc_measurement.registries import DATA_LOADER_REGISTRY, MODEL_REGISTRY
 from auc_measurement.scores import Scores
+from auc_measurement.version import get_version
 
 
 @dataclass_json
@@ -49,7 +51,12 @@ def load_config(config_fname: Union[str, Path]) -> Config:
 
 
 def mark_complete():
-    Path('.complete').touch()
+    completion_data = {
+        'version': get_version(),
+        'timestamp': datetime.utcnow().strftime('%FT%TZ'),
+    }
+    with open('.complete', 'w') as c_out:
+        json.dump(completion_data, c_out)
 
 
 def is_complete() -> bool:
@@ -58,10 +65,11 @@ def is_complete() -> bool:
 
 def score_predictions(y_true: np.ndarray, y_predicted: np.ndarray) -> Scores:
     roc_fpr, roc_tpr, roc_thresholds = metrics.roc_curve(y_true=y_true, y_score=y_predicted)
+    # TODO(hlane) Add label_binarize for multiclass case; evaluate one-vs-all ROC curves.
     return Scores(
-        auc=metrics.roc_auc_score(y_true=y_true, y_score=y_predicted),
-        f1=metrics.f1_score(y_true=y_true, y_pred=y_predicted),
-        accuracy=metrics.accuracy_score(y_true=y_true, y_pred=y_predicted),
+        auc=float(metrics.roc_auc_score(y_true=y_true, y_score=y_predicted)),
+        f1=float(metrics.f1_score(y_true=y_true, y_pred=y_predicted)),
+        accuracy=float(metrics.accuracy_score(y_true=y_true, y_pred=y_predicted)),
         roc_fpr=roc_fpr,
         roc_tpr=roc_tpr,
         roc_thresholds=roc_thresholds
@@ -92,6 +100,8 @@ def run_one_model(X, y, cv_splits, model):
                 logging.info(f'    split {idx} already done; skipping.')
                 continue
             logging.info(f'    Fitting model {model}...')
+            dump(train, 'train_indices.joblib')
+            dump(test, 'test_indices.joblib')
             model.fit(X[train], y[train])
             logging.info('    Done.')
             dump(model, 'model.joblib')

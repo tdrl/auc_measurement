@@ -5,8 +5,10 @@ from tempfile import mkdtemp
 from shutil import rmtree
 from pathlib import Path
 from marshmallow.exceptions import ValidationError
+import json
 
 import auc_measurement.run_expts as target
+from auc_measurement.dir_stack import dir_stack_push
 
 
 class TestRunExpts(TestCase):
@@ -63,6 +65,15 @@ class TestRunExpts(TestCase):
         self.assertEqual(config.models_to_test['C-3PO']['class'], 'protocol')
         self.assertEqual(config.small_data.folds, 13)
         self.assertEqual(config.large_data.folds, 4)
+
+    def test_mark_complete(self):
+        with dir_stack_push(self._temp_dir):
+            target.mark_complete()
+            with open('.complete', 'r') as c_in:
+                complete_data = json.load(c_in)
+            self.assertRegex(complete_data['timestamp'], r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z.*')
+            self.assertRegex(complete_data['version'], r'\d+\.\d+.\d+')
+        
 
 
 if __name__ == '__main__':
