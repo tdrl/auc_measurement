@@ -4,17 +4,18 @@
 from pathlib import Path
 from sys import argv
 import json
-from typing import Dict, Union, List
+from typing import Dict, Union, List, Tuple
 from dataclasses import dataclass, field
 from dataclasses_json import dataclass_json
 import logging
 import numpy as np
-from sklearn.base import ClassifierMixin
+from sklearn.base import ClassifierMixin, TransformerMixin
 from sklearn.utils import Bunch
 from sklearn.model_selection import StratifiedShuffleSplit
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, LabelBinarizer
 from sklearn.pipeline import Pipeline
 import sklearn.metrics as metrics
+from sklearn.utils.multiclass import type_of_target
 from joblib import dump  # type: ignore
 from datetime import datetime
 
@@ -22,6 +23,10 @@ from auc_measurement.dir_stack import dir_stack_push
 from auc_measurement.registries import DATA_LOADER_REGISTRY, MODEL_REGISTRY
 from auc_measurement.scores import Scores
 from auc_measurement.version import get_version
+
+
+# Type definition for a sequence of preprocessors.
+PreprocessorChain = List[Tuple[str, TransformerMixin]]
 
 
 @dataclass_json
@@ -63,9 +68,23 @@ def is_complete() -> bool:
     return Path('.complete').exists()
 
 
-def score_predictions(y_true: np.ndarray, y_predicted: np.ndarray) -> Scores:
-    roc_fpr, roc_tpr, roc_thresholds = metrics.roc_curve(y_true=y_true, y_score=y_predicted)
-    # TODO(hlane) Add label_binarize for multiclass case; evaluate one-vs-all ROC curves.
+def score_predictions(y_true: np.ndarray, y_predicted: Union[np.ndarray, List[np.ndarray]]) -> Scores:
+    if type_of_target(y_true) == 'multiclass':
+        # We've trained in multiclass mode, but for ROC we need binary data. So we'll do
+        # one-vs-all for each label.
+        y_true = LabelBinarizer().fit(y_true).transform(y_true)  # type: ignore
+    else:
+        # Binary class => (n,) shape. Insert a pseudo-dimension for uniformity => (n, 1) dim.
+        y_true = np.expand_dims(y_true, axis=1)
+        y_predicted = [y_predicted]
+    roc_fpr = []
+    roc_tpr = []
+    roc_thresholds = []
+    for one_v_all_label, pred in zip(y_true.T, y_predicted):
+        fpr, tpr, thresholds = metrics.roc_curve(y_true=one_v_all_label, y_score=pred)
+        roc_fpr.append(fpr)
+        roc_tpr.append(tpr)
+        roc_thresholds.append(thresholds)
     return Scores(
         auc=float(metrics.roc_auc_score(y_true=y_true, y_score=y_predicted)),
         f1=float(metrics.f1_score(y_true=y_true, y_pred=y_predicted)),
@@ -116,7 +135,7 @@ def run_one_model(X, y, cv_splits, model):
             mark_complete()
 
 
-def run_single_expt(config: Config, dataset: Bunch):
+def run_single_expt(config: Config, dataset: Bunch, preprocessors: PreprocessorChain = []):
     if is_complete():
         return
     X = dataset['data']
@@ -139,28 +158,42 @@ def run_single_expt(config: Config, dataset: Bunch):
             model = MODEL_REGISTRY[model_name](**params, random_state=config.random_seed)
             with open('model_params.json', 'w') as params_out:
                 json.dump(model.get_params(), params_out, indent=2)
-            pipeline = Pipeline([('PreprocessScaleData', StandardScaler()),
-                                 (f'Model_{model_name}', model)])
+            pipeline = Pipeline(preprocessors + [(f'Model_{model_name}', model)])
             run_one_model(X=X, y=y, cv_splits=cv_splits, model=pipeline)
             mark_complete()
     mark_complete()
 
 
+def run_one_dataset(config: Config, dataset_name: str, dataset: Bunch, preprocessors: PreprocessorChain = []):
+    with dir_stack_push(Path.cwd() / dataset_name, force_create=True) as expt_dir:
+        if is_complete():
+            logging.info(f'Dataset {dataset_name} already done; skipping.')
+            return
+        logging.info(f'Created experiment directory for dataset {dataset_name} at {expt_dir}')
+        with open('dataset_descr.txt', 'w') as descr_out:
+            descr_out.write(dataset['DESCR'])
+        with open('dataset_name.txt', 'w') as name_out:
+            name_out.write(dataset_name + '\n')
+        with open('preprocessing.txt', 'w') as preproc_out:
+            preproc_out.writelines([p[0] for p in preprocessors])
+        run_single_expt(config=config, dataset=dataset, preprocessors=preprocessors)
+        mark_complete()
+
+
 def run_all_expts(config: Config):
     for dataset_name in config.datasets:
         logging.info(f'===== Doing {dataset_name} =====')
-        with dir_stack_push(Path.cwd() / dataset_name, force_create=True) as expt_dir:
-            if is_complete():
-                logging.info(f'Dataset {dataset_name} already done; skipping.')
-                continue
-            logging.info(f'Created experiment directory for dataset {dataset_name} at {expt_dir}')
-            dataset = DATA_LOADER_REGISTRY[dataset_name]()
-            with open('dataset_descr.txt', 'w') as descr_out:
-                descr_out.write(dataset['DESCR'])
-            with open('dataset_name.txt', 'w') as name_out:
-                name_out.write(dataset_name + '\n')
-            run_single_expt(config=config, dataset=dataset)
-            mark_complete()
+        dataset = DATA_LOADER_REGISTRY[dataset_name]()
+        y_type = type_of_target(dataset.target)
+        if y_type not in ('binary', 'multiclass'):
+            logging.warning(f'Dataset {dataset_name} is neither binary nor multiclass; skipping.')
+            continue
+        preprocessors: List[Tuple[str, TransformerMixin]] = [('PreprocessScaleData', StandardScaler())]
+        if y_type == 'multiclass':
+            logging.info(f'Dataset {dataset_name} is multiclass; training both raw and one-vs-all')
+            run_one_dataset(config, dataset_name + '_raw', dataset, preprocessors)
+            preprocessors.append(('BinarizeLabels', LabelBinarizer()))
+            run_one_dataset(config, dataset_name + '_one_v_all', dataset, preprocessors)
 
 
 def main(config=None):
