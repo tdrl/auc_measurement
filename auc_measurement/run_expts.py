@@ -4,14 +4,11 @@
 from pathlib import Path
 from sys import argv
 import json
-from typing import Dict, Union, List, Tuple
-from dataclasses import dataclass, field
-from dataclasses_json import dataclass_json
+from typing import Union, List, Tuple
 import logging
 import numpy as np
 from sklearn.base import ClassifierMixin, TransformerMixin
 from sklearn.utils import Bunch
-from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.preprocessing import StandardScaler, LabelBinarizer
 from sklearn.pipeline import Pipeline
 import sklearn.metrics as metrics
@@ -19,40 +16,12 @@ from sklearn.utils.multiclass import type_of_target
 from joblib import dump  # type: ignore
 from datetime import datetime
 
+from auc_measurement.config import Config, load_config
 from auc_measurement.dir_stack import dir_stack_push
+from auc_measurement.ml_handlers import MLExperimentHandlerSet, ExperimentConfigurationException
 from auc_measurement.registries import DATA_LOADER_REGISTRY, MODEL_REGISTRY
 from auc_measurement.scores import Scores
 from auc_measurement.version import get_version
-
-
-# Type definition for a sequence of preprocessors.
-PreprocessorChain = List[Tuple[str, TransformerMixin]]
-
-
-@dataclass_json
-@dataclass
-class ExptParams:
-    folds: int = 10
-
-
-@dataclass_json
-@dataclass
-class Config:
-    experiments_output_dir: str
-    random_seed: int = 3263827
-    large_data_threshold: int = 10000
-    datasets: List[str] = field(default_factory=list)
-    models_to_test: Dict[str, Dict[str, Union[str, int, float, bool]]] = field(default_factory=dict)
-    small_data: ExptParams = field(default_factory=ExptParams)
-    large_data: ExptParams = field(default_factory=ExptParams)
-
-
-def load_config(config_fname: Union[str, Path]) -> Config:
-    # Note: There _seems_ to be a bug in dataclass_json that infers the wrong type
-    # for a highly nested field, so it fails to deserialze bool model parameters
-    # correctly. We'll skip this for the moment until/unless we need such a param.
-    with open(config_fname, 'r') as raw:
-        return Config.schema().loads(raw.read())  # type: ignore
 
 
 def mark_complete():
@@ -111,8 +80,8 @@ def do_predict(model: ClassifierMixin, X: np.ndarray) -> np.ndarray:
         return model.predict_proba(X)  # type: ignore
 
 
-def run_one_model(X, y, cv_splits, model):
-    for idx, (train, test) in enumerate(cv_splits):
+def run_one_model(X, y, expt_handlers: MLExperimentHandlerSet, model):
+    for idx, (train, test) in enumerate(expt_handlers.split_handler.split_data(X, y)):
         logging.info(f'    Doing split {idx}')
         with dir_stack_push(Path.cwd() / f'fold_{idx}', force_create=True):
             if is_complete():
@@ -135,20 +104,11 @@ def run_one_model(X, y, cv_splits, model):
             mark_complete()
 
 
-def run_single_expt(config: Config, dataset: Bunch, preprocessors: PreprocessorChain = []):
+def run_single_expt(config: Config, expt_handlers: MLExperimentHandlerSet, dataset: Bunch):
     if is_complete():
         return
     X = dataset['data']
     y = dataset['target']
-    rows = X.shape[0]
-    if rows < config.large_data_threshold:
-        expt_config = config.small_data
-        logging.info(f'  Dataset has {rows} points; considered SMALL.')
-    else:
-        expt_config = config.large_data
-        logging.info(f'  Dataset has {rows} points; considered LARGE.')
-    cv = StratifiedShuffleSplit(n_splits=expt_config.folds, random_state=config.random_seed)
-    cv_splits = cv.split(X, y)
     for model_name, params in config.models_to_test.items():
         with dir_stack_push(Path.cwd() / model_name, force_create=True):
             logging.info(f'  Doing model {model_name}...')
@@ -158,13 +118,13 @@ def run_single_expt(config: Config, dataset: Bunch, preprocessors: PreprocessorC
             model = MODEL_REGISTRY[model_name](**params, random_state=config.random_seed)
             with open('model_params.json', 'w') as params_out:
                 json.dump(model.get_params(), params_out, indent=2)
-            pipeline = Pipeline(preprocessors + [(f'Model_{model_name}', model)])
-            run_one_model(X=X, y=y, cv_splits=cv_splits, model=pipeline)
+            pipeline = Pipeline(expt_handlers.preprocessors + [(f'Model_{model_name}', model)])
+            run_one_model(X=X, y=y, expt_handlers=expt_handlers, model=pipeline)
             mark_complete()
     mark_complete()
 
 
-def run_one_dataset(config: Config, dataset_name: str, dataset: Bunch, preprocessors: PreprocessorChain = []):
+def run_one_dataset(config: Config, expt_handlers: MLExperimentHandlerSet, dataset_name: str, dataset: Bunch):
     with dir_stack_push(Path.cwd() / dataset_name, force_create=True) as expt_dir:
         if is_complete():
             logging.info(f'Dataset {dataset_name} already done; skipping.')
@@ -175,8 +135,8 @@ def run_one_dataset(config: Config, dataset_name: str, dataset: Bunch, preproces
         with open('dataset_name.txt', 'w') as name_out:
             name_out.write(dataset_name + '\n')
         with open('preprocessing.txt', 'w') as preproc_out:
-            preproc_out.writelines([p[0] for p in preprocessors])
-        run_single_expt(config=config, dataset=dataset, preprocessors=preprocessors)
+            preproc_out.writelines([p[0] for p in expt_handlers.preprocessors])
+        run_single_expt(config=config, expt_handlers=expt_handlers, dataset=dataset)
         mark_complete()
 
 
@@ -184,16 +144,17 @@ def run_all_expts(config: Config):
     for dataset_name in config.datasets:
         logging.info(f'===== Doing {dataset_name} =====')
         dataset = DATA_LOADER_REGISTRY[dataset_name]()
-        y_type = type_of_target(dataset.target)
-        if y_type not in ('binary', 'multiclass'):
-            logging.warning(f'Dataset {dataset_name} is neither binary nor multiclass; skipping.')
-            continue
-        preprocessors: List[Tuple[str, TransformerMixin]] = [('PreprocessScaleData', StandardScaler())]
-        if y_type == 'multiclass':
-            logging.info(f'Dataset {dataset_name} is multiclass; training both raw and one-vs-all')
-            run_one_dataset(config, dataset_name + '_raw', dataset, preprocessors)
-            preprocessors.append(('BinarizeLabels', LabelBinarizer()))
-            run_one_dataset(config, dataset_name + '_one_v_all', dataset, preprocessors)
+        try:
+            expt_handlers = MLExperimentHandlerSet(config=config, dataset=dataset, dataset_base_name=dataset_name)
+            expt_handlers.add_preprocessor('ScaleData', StandardScaler())
+            if expt_handlers.y_type == 'multiclass':
+                logging.info(f'Dataset {dataset_name} is multiclass; training both raw and one-vs-all')
+                run_one_dataset(config, expt_handlers, dataset_name + '_raw', dataset)
+                expt_handlers.add_preprocessor('BinarizeLabels', LabelBinarizer())
+                run_one_dataset(config, expt_handlers, dataset_name + '_one_v_all', dataset)
+                expt_handlers.remove_preprocessor('BinarizeLabels')
+        except ExperimentConfigurationException:
+            pass
 
 
 def main(config=None):
