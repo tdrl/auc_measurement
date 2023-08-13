@@ -10,7 +10,9 @@ from typing import List, Dict, Union
 @dataclass
 class ExptParams:
     """Parameters governing a single, data size-dependent experiment."""
-    folds: int = 10  # Number of folds to do in the split.
+    folds: int = 10  # Number of folds to do in the highest level split.
+    calibration_folds: int = 4  # Number of folds to use in fitting the probability calibrator.
+    calibration_type: str = 'sigmoid'  # 'sigmoid' or 'isotonic'. See docs on CalibratedClassifierCV.
 
 
 @dataclass_json

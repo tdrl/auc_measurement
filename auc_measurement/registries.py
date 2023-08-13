@@ -16,10 +16,12 @@ from sklearn.datasets import (
     load_wine,
 )
 
+# Note for future: Could auto-populate this via sklearn.utils.discovery.all_estimators('classifier')
+# but we probably want to be more selective than that.
 MODEL_REGISTRY: Dict[str, Callable] = {
     'dtree': tree.DecisionTreeClassifier,
     'logistic': linear_model.LogisticRegression,
-    'ridge_classifier': linear_model.RidgeClassifier,
+    # 'ridge_classifier': linear_model.RidgeClassifier,
     'svm': svm.SVC,
 }
 

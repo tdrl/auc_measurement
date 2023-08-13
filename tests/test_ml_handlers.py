@@ -24,14 +24,20 @@ class TestMlHandlers(TestCase):
         self._default_config = Config(experiments_output_dir='.',
                                       # Populate with all known models, so we don't have to keep
                                       # this manually in sync with the registry.
-                                      models_to_test={m_name: {} for m_name in reg.MODEL_REGISTRY.keys()})
-        # For models without a predict_proba by default, we need to force a mode in which they
-        # evaluate probabilities. (Warning: May be expensive.)
-        for model_name in ['svm', 'ridge_classifier']:
-            self._default_config.models_to_test[model_name]['probability'] = True
-        X_bin, y_bin = make_classification(n_samples=20, n_classes=2)
+                                      models_to_test={m_name: {} for m_name in reg.MODEL_REGISTRY.keys()},
+                                      large_data_threshold=200)
+        # Dataset sizes chosen to that (a) they're both SMALL, and (b) there're enough samples so that
+        # each class has a reasonable number of exemplars. (Specifically, we have at least 5 examples of
+        # each class after CV splitting).
+        self._default_binary_rows = 40
+        X_bin, y_bin = make_classification(n_samples=self._default_binary_rows, n_classes=2)
         self._default_binary_dataset = Bunch(data=X_bin, target=y_bin)
-        X_multi, y_multi = make_classification(n_samples=20, n_classes=7, n_features=11, n_informative=9)
+        self._default_multiclass_rows = 100
+        self._default_multiclass_classes = 7
+        X_multi, y_multi = make_classification(n_samples=self._default_multiclass_rows,
+                                               n_classes=self._default_multiclass_classes,
+                                               n_features=11,
+                                               n_informative=9)
         self._default_multiclass_dataset = Bunch(data=X_multi, target=y_multi)
 
     def tearDown(self) -> None:
@@ -45,7 +51,8 @@ class TestMlHandlers(TestCase):
         config.large_data.folds = 2
         X, y = make_classification(n_samples=20)
         dataset = Bunch(data=X, target=y)
-        handler = target.data_split_handler_factory(config=config, dataset=dataset)
+        experiment = target.MLExperimentHandlerSet(config=config, dataset=dataset, dataset_base_name='testData')
+        handler = experiment.data_split_handler_factory()
         self.assertEqual(handler._n_splits, 5)
         splits = handler.split_data(dataset.data, dataset.target)
         self.assertEqual(len(list(splits)), 5)
@@ -56,7 +63,8 @@ class TestMlHandlers(TestCase):
         config.large_data.folds = 2
         X, y = make_classification(n_samples=50)
         dataset = Bunch(data=X, target=y)
-        handler = target.data_split_handler_factory(config=config, dataset=dataset)
+        experiment = target.MLExperimentHandlerSet(config=config, dataset=dataset, dataset_base_name='testData')
+        handler = experiment.data_split_handler_factory()
         self.assertEqual(handler._n_splits, 2)
         splits = handler.split_data(dataset.data, dataset.target)
         self.assertEqual(len(list(splits)), 2)
@@ -97,8 +105,8 @@ class TestMlHandlers(TestCase):
         handlers.set_model_by_name('dtree')
         handlers.fit_model(self._default_binary_dataset.data, self._default_binary_dataset.target)
         yhat = handlers.predict_soft(self._default_binary_dataset.data)
-        self.assertEqual(yhat.shape, (20, 2))
-        assert_array_almost_equal(yhat.sum(axis=1), np.ones((20,)))
+        self.assertEqual(yhat.shape, (self._default_binary_rows, 2))
+        assert_array_almost_equal(yhat.sum(axis=1), np.ones((self._default_binary_rows,)))
 
     def test_predict_soft_dtree_multiclass(self):
         handlers = target.MLExperimentHandlerSet(config=self._default_config,
@@ -107,8 +115,8 @@ class TestMlHandlers(TestCase):
         handlers.set_model_by_name('dtree')
         handlers.fit_model(self._default_multiclass_dataset.data, self._default_multiclass_dataset.target)
         yhat = handlers.predict_soft(self._default_multiclass_dataset.data)
-        self.assertEqual(yhat.shape, (20, 7))
-        assert_array_almost_equal(yhat.sum(axis=1), np.ones((20,)))
+        self.assertEqual(yhat.shape, (self._default_multiclass_rows, self._default_multiclass_classes))
+        assert_array_almost_equal(yhat.sum(axis=1), np.ones((self._default_multiclass_rows,)))
 
     def test_predict_soft_logistic_binary(self):
         handlers = target.MLExperimentHandlerSet(config=self._default_config,
@@ -117,8 +125,8 @@ class TestMlHandlers(TestCase):
         handlers.set_model_by_name('logistic')
         handlers.fit_model(self._default_binary_dataset.data, self._default_binary_dataset.target)
         yhat = handlers.predict_soft(self._default_binary_dataset.data)
-        self.assertEqual(yhat.shape, (20, 2))
-        assert_array_almost_equal(yhat.sum(axis=1), np.ones((20,)))
+        self.assertEqual(yhat.shape, (self._default_binary_rows, 2))
+        assert_array_almost_equal(yhat.sum(axis=1), np.ones((self._default_binary_rows,)))
 
     def test_predict_soft_logistic_multiclass(self):
         handlers = target.MLExperimentHandlerSet(config=self._default_config,
@@ -127,8 +135,8 @@ class TestMlHandlers(TestCase):
         handlers.set_model_by_name('logistic')
         handlers.fit_model(self._default_multiclass_dataset.data, self._default_multiclass_dataset.target)
         yhat = handlers.predict_soft(self._default_multiclass_dataset.data)
-        self.assertEqual(yhat.shape, (20, 7))
-        assert_array_almost_equal(yhat.sum(axis=1), np.ones((20,)))
+        self.assertEqual(yhat.shape, (self._default_multiclass_rows, self._default_multiclass_classes))
+        assert_array_almost_equal(yhat.sum(axis=1), np.ones((self._default_multiclass_rows,)))
 
     def test_predict_soft_svm_binary(self):
         handlers = target.MLExperimentHandlerSet(config=self._default_config,
@@ -137,8 +145,8 @@ class TestMlHandlers(TestCase):
         handlers.set_model_by_name('svm')
         handlers.fit_model(self._default_binary_dataset.data, self._default_binary_dataset.target)
         yhat = handlers.predict_soft(self._default_binary_dataset.data)
-        self.assertEqual(yhat.shape, (20, 2))
-        assert_array_almost_equal(yhat.sum(axis=1), np.ones((20,)))
+        self.assertEqual(yhat.shape, (self._default_binary_rows, 2))
+        assert_array_almost_equal(yhat.sum(axis=1), np.ones((self._default_binary_rows,)))
 
     def test_predict_soft_svm_multiclass(self):
         handlers = target.MLExperimentHandlerSet(config=self._default_config,
@@ -147,8 +155,8 @@ class TestMlHandlers(TestCase):
         handlers.set_model_by_name('svm')
         handlers.fit_model(self._default_multiclass_dataset.data, self._default_multiclass_dataset.target)
         yhat = handlers.predict_soft(self._default_multiclass_dataset.data)
-        self.assertEqual(yhat.shape, (20, 7))
-        assert_array_almost_equal(yhat.sum(axis=1), np.ones((20,)))
+        self.assertEqual(yhat.shape, (self._default_multiclass_rows, self._default_multiclass_classes))
+        assert_array_almost_equal(yhat.sum(axis=1), np.ones((self._default_multiclass_rows,)))
 
     def test_predict_all_classifiers_binary(self):
         handlers = target.MLExperimentHandlerSet(config=self._default_config,
@@ -158,8 +166,8 @@ class TestMlHandlers(TestCase):
             handlers.set_model_by_name(model_name)
             handlers.fit_model(self._default_binary_dataset.data, self._default_binary_dataset.target)
             yhat = handlers.predict_soft(self._default_binary_dataset.data)
-            self.assertEqual(yhat.shape, (20, 2), f'Failed on model = {model_name}')
-            assert_array_almost_equal(yhat.sum(axis=1), np.ones((20,)), err_msg=f'Failed on model = {model_name}')
+            self.assertEqual(yhat.shape, (self._default_binary_rows, 2), f'Failed on model = {model_name}')
+            assert_array_almost_equal(yhat.sum(axis=1), np.ones((self._default_binary_rows,)), err_msg=f'Failed on model = {model_name}')
 
 
 if __name__ == '__main__':
