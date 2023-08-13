@@ -4,13 +4,11 @@
 from pathlib import Path
 from sys import argv
 import json
-from typing import Union, List, Tuple
+from typing import Union, List
 import logging
 import numpy as np
-from sklearn.base import ClassifierMixin, TransformerMixin
 from sklearn.utils import Bunch
 from sklearn.preprocessing import StandardScaler, LabelBinarizer
-from sklearn.pipeline import Pipeline
 import sklearn.metrics as metrics
 from sklearn.utils.multiclass import type_of_target
 from joblib import dump  # type: ignore
@@ -19,7 +17,7 @@ from datetime import datetime
 from auc_measurement.config import Config, load_config
 from auc_measurement.dir_stack import dir_stack_push
 from auc_measurement.ml_handlers import MLExperimentHandlerSet, ExperimentConfigurationException
-from auc_measurement.registries import DATA_LOADER_REGISTRY, MODEL_REGISTRY
+from auc_measurement.registries import DATA_LOADER_REGISTRY
 from auc_measurement.scores import Scores
 from auc_measurement.version import get_version
 
@@ -42,10 +40,15 @@ def score_predictions(y_true: np.ndarray, y_predicted: Union[np.ndarray, List[np
         # We've trained in multiclass mode, but for ROC we need binary data. So we'll do
         # one-vs-all for each label.
         y_true = LabelBinarizer().fit(y_true).transform(y_true)  # type: ignore
-    else:
-        # Binary class => (n,) shape. Insert a pseudo-dimension for uniformity => (n, 1) dim.
+    elif type_of_target(y_true) == 'binary':
+        # Binary class => ground truth is (n,) shape. Insert a pseudo-dimension for uniformity => (n, 1) dim.
         y_true = np.expand_dims(y_true, axis=1)
+        # In multiclass, predicted is a list of vectors.
         y_predicted = [y_predicted]
+    else:
+        raise ExperimentConfigurationException('Not sure how we got to scoring without realizing '
+                                               'that this data set is neither binary nor '
+                                               'multiclass, but here we are. *shrug*')
     roc_fpr = []
     roc_tpr = []
     roc_thresholds = []
@@ -64,38 +67,22 @@ def score_predictions(y_true: np.ndarray, y_predicted: Union[np.ndarray, List[np
     )
 
 
-def do_predict(model: ClassifierMixin, X: np.ndarray) -> np.ndarray:
-    """Figure out whether to use decision_function or predict_proba.
-
-    Args:
-        model (_type_): Classifier model.
-        X (_type_): Data feature set.
-
-    Returns:
-        _type_: Predicted confidence/margin/soft values.
-    """
-    if hasattr(model, 'decision_function'):
-        return model.decision_function(X)  # type: ignore
-    else:
-        return model.predict_proba(X)  # type: ignore
-
-
-def run_one_model(X, y, expt_handlers: MLExperimentHandlerSet, model):
+def run_one_model(X, y, expt_handlers: MLExperimentHandlerSet):
     for idx, (train, test) in enumerate(expt_handlers.split_handler.split_data(X, y)):
         logging.info(f'    Doing split {idx}')
         with dir_stack_push(Path.cwd() / f'fold_{idx}', force_create=True):
             if is_complete():
                 logging.info(f'    split {idx} already done; skipping.')
                 continue
-            logging.info(f'    Fitting model {model}...')
+            logging.info(f'    Fitting model {expt_handlers.model_name}...')
             dump(train, 'train_indices.joblib')
             dump(test, 'test_indices.joblib')
-            model.fit(X[train], y[train])
+            expt_handlers.fit_model(X[train], y[train])
             logging.info('    Done.')
-            dump(model, 'model.joblib')
+            dump(expt_handlers.model, 'model.joblib')
             dump(y[test], 'ground_truth_labels.joblib')
             logging.info('    Predicting on test fold...')
-            y_predicted = do_predict(model=model, X=X[test])
+            y_predicted = expt_handlers.predict_soft(X=X[test])
             dump(y_predicted, 'predictions.joblib')
             scores = score_predictions(y_true=y[test], y_predicted=y_predicted)
             with open('final_scores.json', 'w') as scores_out:
@@ -109,17 +96,16 @@ def run_single_expt(config: Config, expt_handlers: MLExperimentHandlerSet, datas
         return
     X = dataset['data']
     y = dataset['target']
-    for model_name, params in config.models_to_test.items():
+    for model_name in config.models_to_test:
         with dir_stack_push(Path.cwd() / model_name, force_create=True):
             logging.info(f'  Doing model {model_name}...')
             if is_complete():
                 logging.info(f'  Model {model_name} already done; skipping.')
                 continue
-            model = MODEL_REGISTRY[model_name](**params, random_state=config.random_seed)
+            expt_handlers.set_model_by_name(model_name=model_name)
             with open('model_params.json', 'w') as params_out:
-                json.dump(model.get_params(), params_out, indent=2)
-            pipeline = Pipeline(expt_handlers.preprocessors + [(f'Model_{model_name}', model)])
-            run_one_model(X=X, y=y, expt_handlers=expt_handlers, model=pipeline)
+                json.dump(expt_handlers.model.get_params(), params_out, indent=2)  # type: ignore
+            run_one_model(X=X, y=y, expt_handlers=expt_handlers)
             mark_complete()
     mark_complete()
 
