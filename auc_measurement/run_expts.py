@@ -4,7 +4,7 @@
 from pathlib import Path
 from sys import argv
 import json
-from typing import Union, List
+from typing import Union, List, Mapping, Iterable
 import logging
 import numpy as np
 from sklearn.utils import Bunch
@@ -66,6 +66,28 @@ def score_predictions(y_true: np.ndarray, y_predicted: Union[np.ndarray, List[np
         roc_thresholds=roc_thresholds
     )
 
+def fully_expand_params(params):
+    """Helper function: Expand all nested objects in get_params() values.
+
+    The issue is that when you call get_params() on an actual estimator, it will return
+    a dict of (key, concrete value) pairs. But when you call it on a Pipeline, it doesn't - it
+    nests actual instances of models inside the return value. Which is terrible if you want
+    to serialize it with JSON. Urgh. So this recurses the data struct, finding things with
+    'get_params()' methods and replacing them with their invocation.
+
+    Args:
+        params (Any): Object returned by estimator.get_params()
+    """
+    if isinstance(params, str) or isinstance(params, int) or isinstance(params, float) or isinstance(params, bool) or params is None:
+        return params
+    if hasattr(params, 'get_params'):
+        return fully_expand_params(params.get_params(deep=False))
+    if issubclass(type(params), Mapping):
+        return {k: fully_expand_params(v) for k, v in params.items()}
+    if issubclass(type(params), Iterable):
+        return [fully_expand_params(x) for x in params]
+    return params
+
 
 def run_one_model(X, y, expt_handlers: MLExperimentEngine):
     for idx, (train, test) in enumerate(expt_handlers.split_handler.split_data(X, y)):
@@ -104,7 +126,7 @@ def run_single_expt(config: Config, expt_handlers: MLExperimentEngine, dataset: 
                 continue
             expt_handlers.set_model_by_name(model_name=model_name)
             with open('model_params.json', 'w') as params_out:
-                json.dump(expt_handlers.model.get_params(), params_out, indent=2)  # type: ignore
+                json.dump(fully_expand_params(expt_handlers.model), params_out, indent=2)  # type:ignore
             run_one_model(X=X, y=y, expt_handlers=expt_handlers)
             mark_complete()
     mark_complete()
