@@ -21,7 +21,7 @@ from sklearn.datasets import (
 MODEL_REGISTRY: Dict[str, Callable] = {
     'dtree': tree.DecisionTreeClassifier,
     'logistic': linear_model.LogisticRegression,
-    # 'ridge_classifier': linear_model.RidgeClassifier,
+    'ridge_classifier': linear_model.RidgeClassifier,
     'svm': svm.SVC,
 }
 

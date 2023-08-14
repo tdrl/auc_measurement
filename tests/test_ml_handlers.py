@@ -51,7 +51,7 @@ class TestMlHandlers(TestCase):
         config.large_data.folds = 2
         X, y = make_classification(n_samples=20)
         dataset = Bunch(data=X, target=y)
-        experiment = target.MLExperimentHandlerSet(config=config, dataset=dataset, dataset_base_name='testData')
+        experiment = target.MLExperimentEngine(config=config, dataset=dataset, dataset_base_name='testData')
         handler = experiment.data_split_handler_factory()
         self.assertEqual(handler._n_splits, 5)
         splits = handler.split_data(dataset.data, dataset.target)
@@ -63,16 +63,16 @@ class TestMlHandlers(TestCase):
         config.large_data.folds = 2
         X, y = make_classification(n_samples=50)
         dataset = Bunch(data=X, target=y)
-        experiment = target.MLExperimentHandlerSet(config=config, dataset=dataset, dataset_base_name='testData')
+        experiment = target.MLExperimentEngine(config=config, dataset=dataset, dataset_base_name='testData')
         handler = experiment.data_split_handler_factory()
         self.assertEqual(handler._n_splits, 2)
         splits = handler.split_data(dataset.data, dataset.target)
         self.assertEqual(len(list(splits)), 2)
 
     def test_add_remove_preprocessors(self):
-        handlers = target.MLExperimentHandlerSet(config=self._default_config,
-                                                 dataset=self._default_binary_dataset,
-                                                 dataset_base_name='testData')
+        handlers = target.MLExperimentEngine(config=self._default_config,
+                                             dataset=self._default_binary_dataset,
+                                             dataset_base_name='testData')
         self.assertEqual(len(handlers.preprocessors), 0)
         handlers.add_preprocessor('foo', None)  # type: ignore
         self.assertEqual(len(handlers.preprocessors), 1)
@@ -85,23 +85,23 @@ class TestMlHandlers(TestCase):
         self.assertEqual([x[0] for x in handlers.preprocessors], ['foo', 'baz'])
 
     def test_set_model_exception_if_unknown_model_name(self):
-        handlers = target.MLExperimentHandlerSet(config=self._default_config,
-                                                 dataset=self._default_binary_dataset,
-                                                 dataset_base_name='testData')
+        handlers = target.MLExperimentEngine(config=self._default_config,
+                                             dataset=self._default_binary_dataset,
+                                             dataset_base_name='testData')
         with self.assertRaisesRegex(target.ExperimentConfigurationException, r'blurfle'):
             handlers.set_model_by_name('blurfle')
 
     def test_predict_soft_error_if_model_unset(self):
-        handlers = target.MLExperimentHandlerSet(config=self._default_config,
-                                                 dataset=self._default_binary_dataset,
-                                                 dataset_base_name='testData')
+        handlers = target.MLExperimentEngine(config=self._default_config,
+                                             dataset=self._default_binary_dataset,
+                                             dataset_base_name='testData')
         with self.assertRaises(ValueError):
             handlers.predict_soft(self._default_binary_dataset.data)
 
     def test_predict_all_classifiers_binary(self):
-        handlers = target.MLExperimentHandlerSet(config=self._default_config,
-                                                 dataset=self._default_binary_dataset,
-                                                 dataset_base_name='testData')
+        handlers = target.MLExperimentEngine(config=self._default_config,
+                                             dataset=self._default_binary_dataset,
+                                             dataset_base_name='testData')
         for model_name in target.MODEL_REGISTRY:
             handlers.set_model_by_name(model_name)
             handlers.fit_model(self._default_binary_dataset.data, self._default_binary_dataset.target)
@@ -111,9 +111,9 @@ class TestMlHandlers(TestCase):
                                       err_msg=f'Failed on model = {model_name}')
 
     def test_predict_all_classifiers_multiclass(self):
-        handlers = target.MLExperimentHandlerSet(config=self._default_config,
-                                                 dataset=self._default_multiclass_dataset,
-                                                 dataset_base_name='testData')
+        handlers = target.MLExperimentEngine(config=self._default_config,
+                                             dataset=self._default_multiclass_dataset,
+                                             dataset_base_name='testData')
         for model_name in target.MODEL_REGISTRY:
             handlers.set_model_by_name(model_name)
             handlers.fit_model(self._default_multiclass_dataset.data, self._default_multiclass_dataset.target)

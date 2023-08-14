@@ -51,7 +51,7 @@ class DataSplitHandler(object):
         return self._cv.split(X, y)
 
 
-class MLExperimentHandlerSet(object):
+class MLExperimentEngine(object):
     """Container for the various handlers that are necessary to fully realize an experiment."""
     def __init__(self, config: Config, dataset: Bunch, dataset_base_name: str) -> None:
         self.config: Config = config
@@ -60,7 +60,7 @@ class MLExperimentHandlerSet(object):
         self.split_handler: DataSplitHandler = self.data_split_handler_factory()
         self.y_type: str = type_of_target(dataset.target)
         if self.y_type not in ('binary', 'multiclass'):
-            logging.warning(f'Dataset {dataset_base_name} is neither binary nor multiclass; skipping.')
+            logging.warning(f'  Dataset {dataset_base_name} is neither binary nor multiclass; skipping.')
             raise ExperimentConfigurationException(f'Dataset {dataset_base_name} is neither binary nor multiclass')
         self.preprocessors: PreprocessorChain = []
         self.model: Optional[BaseEstimator] = None
@@ -102,9 +102,9 @@ class MLExperimentHandlerSet(object):
     def maybe_add_calibrator(self, base_model: BaseEstimator) -> BaseEstimator:
         if hasattr(base_model, 'predict_proba'):
             # Model knows how to predict probabilities natively. Doesn't need calibration.
-            logging.info(f"Model {self.model_name} understands probabilities. Righteous. No calibration needed.")
+            logging.info(f"  Model {self.model_name} understands probabilities. Righteous. No calibration needed.")
             return base_model
-        logging.info(f"Model {self.model_name} doesn't know how to estimate probabilities natively. "
+        logging.info(f"  Model {self.model_name} doesn't know how to estimate probabilities natively. "
                      "Adding a probability calibration step.")
         if self.dataset_is_large():
             logging.info(f'  Dataset has {self.get_row_count()} points: using LARGE settings '

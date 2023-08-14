@@ -16,7 +16,7 @@ from datetime import datetime
 
 from auc_measurement.config import Config, load_config
 from auc_measurement.dir_stack import dir_stack_push
-from auc_measurement.ml_handlers import MLExperimentHandlerSet, ExperimentConfigurationException
+from auc_measurement.ml_handlers import MLExperimentEngine, ExperimentConfigurationException
 from auc_measurement.registries import DATA_LOADER_REGISTRY
 from auc_measurement.scores import Scores
 from auc_measurement.version import get_version
@@ -67,7 +67,7 @@ def score_predictions(y_true: np.ndarray, y_predicted: Union[np.ndarray, List[np
     )
 
 
-def run_one_model(X, y, expt_handlers: MLExperimentHandlerSet):
+def run_one_model(X, y, expt_handlers: MLExperimentEngine):
     for idx, (train, test) in enumerate(expt_handlers.split_handler.split_data(X, y)):
         logging.info(f'    Doing split {idx}')
         with dir_stack_push(Path.cwd() / f'fold_{idx}', force_create=True):
@@ -91,7 +91,7 @@ def run_one_model(X, y, expt_handlers: MLExperimentHandlerSet):
             mark_complete()
 
 
-def run_single_expt(config: Config, expt_handlers: MLExperimentHandlerSet, dataset: Bunch):
+def run_single_expt(config: Config, expt_handlers: MLExperimentEngine, dataset: Bunch):
     if is_complete():
         return
     X = dataset['data']
@@ -110,12 +110,12 @@ def run_single_expt(config: Config, expt_handlers: MLExperimentHandlerSet, datas
     mark_complete()
 
 
-def run_one_dataset(config: Config, expt_handlers: MLExperimentHandlerSet, dataset_name: str, dataset: Bunch):
+def run_one_dataset(config: Config, expt_handlers: MLExperimentEngine, dataset_name: str, dataset: Bunch):
     with dir_stack_push(Path.cwd() / dataset_name, force_create=True) as expt_dir:
         if is_complete():
-            logging.info(f'Dataset {dataset_name} already done; skipping.')
+            logging.info(f'  Dataset {dataset_name} already done; skipping.')
             return
-        logging.info(f'Created experiment directory for dataset {dataset_name} at {expt_dir}')
+        logging.info(f'  Created experiment directory for dataset {dataset_name} at {expt_dir}')
         with open('dataset_descr.txt', 'w') as descr_out:
             descr_out.write(dataset['DESCR'])
         with open('dataset_name.txt', 'w') as name_out:
@@ -131,10 +131,10 @@ def run_all_expts(config: Config):
         logging.info(f'===== Doing {dataset_name} =====')
         dataset = DATA_LOADER_REGISTRY[dataset_name]()
         try:
-            expt_handlers = MLExperimentHandlerSet(config=config, dataset=dataset, dataset_base_name=dataset_name)
+            expt_handlers = MLExperimentEngine(config=config, dataset=dataset, dataset_base_name=dataset_name)
             expt_handlers.add_preprocessor('ScaleData', StandardScaler())
             if expt_handlers.y_type == 'multiclass':
-                logging.info(f'Dataset {dataset_name} is multiclass; training both raw and one-vs-all')
+                logging.info(f'  Dataset {dataset_name} is multiclass; training both raw and one-vs-all')
                 run_one_dataset(config, expt_handlers, dataset_name + '_raw', dataset)
                 expt_handlers.add_preprocessor('BinarizeLabels', LabelBinarizer())
                 run_one_dataset(config, expt_handlers, dataset_name + '_one_v_all', dataset)
