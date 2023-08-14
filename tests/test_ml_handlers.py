@@ -98,66 +98,6 @@ class TestMlHandlers(TestCase):
         with self.assertRaises(ValueError):
             handlers.predict_soft(self._default_binary_dataset.data)
 
-    def test_predict_soft_dtree_binary(self):
-        handlers = target.MLExperimentHandlerSet(config=self._default_config,
-                                                 dataset=self._default_binary_dataset,
-                                                 dataset_base_name='testData')
-        handlers.set_model_by_name('dtree')
-        handlers.fit_model(self._default_binary_dataset.data, self._default_binary_dataset.target)
-        yhat = handlers.predict_soft(self._default_binary_dataset.data)
-        self.assertEqual(yhat.shape, (self._default_binary_rows, 2))
-        assert_array_almost_equal(yhat.sum(axis=1), np.ones((self._default_binary_rows,)))
-
-    def test_predict_soft_dtree_multiclass(self):
-        handlers = target.MLExperimentHandlerSet(config=self._default_config,
-                                                 dataset=self._default_multiclass_dataset,
-                                                 dataset_base_name='testData')
-        handlers.set_model_by_name('dtree')
-        handlers.fit_model(self._default_multiclass_dataset.data, self._default_multiclass_dataset.target)
-        yhat = handlers.predict_soft(self._default_multiclass_dataset.data)
-        self.assertEqual(yhat.shape, (self._default_multiclass_rows, self._default_multiclass_classes))
-        assert_array_almost_equal(yhat.sum(axis=1), np.ones((self._default_multiclass_rows,)))
-
-    def test_predict_soft_logistic_binary(self):
-        handlers = target.MLExperimentHandlerSet(config=self._default_config,
-                                                 dataset=self._default_binary_dataset,
-                                                 dataset_base_name='testData')
-        handlers.set_model_by_name('logistic')
-        handlers.fit_model(self._default_binary_dataset.data, self._default_binary_dataset.target)
-        yhat = handlers.predict_soft(self._default_binary_dataset.data)
-        self.assertEqual(yhat.shape, (self._default_binary_rows, 2))
-        assert_array_almost_equal(yhat.sum(axis=1), np.ones((self._default_binary_rows,)))
-
-    def test_predict_soft_logistic_multiclass(self):
-        handlers = target.MLExperimentHandlerSet(config=self._default_config,
-                                                 dataset=self._default_multiclass_dataset,
-                                                 dataset_base_name='testData')
-        handlers.set_model_by_name('logistic')
-        handlers.fit_model(self._default_multiclass_dataset.data, self._default_multiclass_dataset.target)
-        yhat = handlers.predict_soft(self._default_multiclass_dataset.data)
-        self.assertEqual(yhat.shape, (self._default_multiclass_rows, self._default_multiclass_classes))
-        assert_array_almost_equal(yhat.sum(axis=1), np.ones((self._default_multiclass_rows,)))
-
-    def test_predict_soft_svm_binary(self):
-        handlers = target.MLExperimentHandlerSet(config=self._default_config,
-                                                 dataset=self._default_binary_dataset,
-                                                 dataset_base_name='testData')
-        handlers.set_model_by_name('svm')
-        handlers.fit_model(self._default_binary_dataset.data, self._default_binary_dataset.target)
-        yhat = handlers.predict_soft(self._default_binary_dataset.data)
-        self.assertEqual(yhat.shape, (self._default_binary_rows, 2))
-        assert_array_almost_equal(yhat.sum(axis=1), np.ones((self._default_binary_rows,)))
-
-    def test_predict_soft_svm_multiclass(self):
-        handlers = target.MLExperimentHandlerSet(config=self._default_config,
-                                                 dataset=self._default_multiclass_dataset,
-                                                 dataset_base_name='testData')
-        handlers.set_model_by_name('svm')
-        handlers.fit_model(self._default_multiclass_dataset.data, self._default_multiclass_dataset.target)
-        yhat = handlers.predict_soft(self._default_multiclass_dataset.data)
-        self.assertEqual(yhat.shape, (self._default_multiclass_rows, self._default_multiclass_classes))
-        assert_array_almost_equal(yhat.sum(axis=1), np.ones((self._default_multiclass_rows,)))
-
     def test_predict_all_classifiers_binary(self):
         handlers = target.MLExperimentHandlerSet(config=self._default_config,
                                                  dataset=self._default_binary_dataset,
@@ -167,7 +107,21 @@ class TestMlHandlers(TestCase):
             handlers.fit_model(self._default_binary_dataset.data, self._default_binary_dataset.target)
             yhat = handlers.predict_soft(self._default_binary_dataset.data)
             self.assertEqual(yhat.shape, (self._default_binary_rows, 2), f'Failed on model = {model_name}')
-            assert_array_almost_equal(yhat.sum(axis=1), np.ones((self._default_binary_rows,)), err_msg=f'Failed on model = {model_name}')
+            assert_array_almost_equal(yhat.sum(axis=1), np.ones((self._default_binary_rows,)),
+                                      err_msg=f'Failed on model = {model_name}')
+
+    def test_predict_all_classifiers_multiclass(self):
+        handlers = target.MLExperimentHandlerSet(config=self._default_config,
+                                                 dataset=self._default_multiclass_dataset,
+                                                 dataset_base_name='testData')
+        for model_name in target.MODEL_REGISTRY:
+            handlers.set_model_by_name(model_name)
+            handlers.fit_model(self._default_multiclass_dataset.data, self._default_multiclass_dataset.target)
+            yhat = handlers.predict_soft(self._default_multiclass_dataset.data)
+            self.assertEqual(yhat.shape, (self._default_multiclass_rows, self._default_multiclass_classes),
+                             f'Failed on model = {model_name}')
+            assert_array_almost_equal(yhat.sum(axis=1), np.ones((self._default_multiclass_rows,)),
+                                      err_msg=f'Failed on model = {model_name}')
 
 
 if __name__ == '__main__':
