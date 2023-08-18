@@ -14,11 +14,14 @@ of factory functions that encode the necessary case logic and that produce handl
 encapsulate the case-specific behaviors.
 """
 
+from abc import ABC, abstractmethod
 import logging
 import numpy as np
 from sklearn.base import TransformerMixin, BaseEstimator
 from sklearn.calibration import CalibratedClassifierCV
+import sklearn.metrics as metrics
 from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn.preprocessing import LabelBinarizer
 from sklearn.pipeline import Pipeline
 from sklearn.utils import Bunch
 from sklearn.utils.multiclass import type_of_target
@@ -26,6 +29,7 @@ from typing import List, Tuple, Optional
 
 from auc_measurement.config import Config
 from auc_measurement.registries import MODEL_REGISTRY
+from auc_measurement.scores import Scores
 
 
 class ExperimentConfigurationException(Exception):
@@ -49,6 +53,64 @@ class DataSplitHandler(object):
 
     def split_data(self, X, y):
         return self._cv.split(X, y)
+
+
+class ScoreHandler(ABC):
+    """Encapsulates behavior of how to generate scores for different types of output variables.
+    
+    We have different logic for scoring binary vs multiclass data. (And probably binary one-vs-all
+    still to come.) This class hierarchy factors those cases into separate classes. See:
+      - BinaryScoreHandler
+      - MulticlassScoreHandler
+    """
+    @abstractmethod
+    def score(self, y_true: np.ndarray, y_predicted: np.ndarray) -> Scores:
+        # TODO(hlane): This probably needs to push down to base classes.
+        y_pred_thresh = y_predicted > 0.5
+        return Scores(
+            auc=float(metrics.roc_auc_score(y_true=y_true, y_score=y_predicted)),
+            f1=float(metrics.f1_score(y_true=y_true, y_pred=y_pred_thresh)),
+            accuracy=float(metrics.accuracy_score(y_true=y_true, y_pred=y_pred_thresh))
+        )
+
+    @classmethod
+    def score_handler_factory(cls, y_true: np.ndarray, y_predicted: np.ndarray) -> 'ScoreHandler':
+        if type_of_target(y_true) == 'multiclass':
+            return MulticlassScoreHandler()
+        elif type_of_target(y_true) == 'binary':
+            return BinaryScoreHandler()
+        else:
+            raise ExperimentConfigurationException('Not sure how we got to scoring without realizing '
+                                                   'that this data set is neither binary nor '
+                                                   'multiclass, but here we are. *shrug*')
+
+
+class BinaryScoreHandler(ScoreHandler):
+    def score(self, y_true: np.ndarray, y_predicted: np.ndarray) -> Scores:
+        result = super().score(y_true=y_true, y_predicted=y_predicted[:, 1])
+        fpr, tpr, thresholds = metrics.roc_curve(y_true=y_true, y_score=y_predicted[:, 1])
+        result.roc_fpr.append(fpr)
+        result.roc_tpr.append(tpr)
+        result.roc_thresholds.append(thresholds)
+        return result
+
+
+class MulticlassScoreHandler(ScoreHandler):
+    def score(self, y_true: np.ndarray, y_predicted: np.ndarray) -> Scores:
+        # We've trained in multiclass mode, but for ROC we need binary data. So we'll do
+        # one-vs-all for each label.
+        y_true = LabelBinarizer().fit(y_true).transform(y_true)  # type: ignore
+        # Binary class => ground truth is (n,) shape. Insert a pseudo-dimension for uniformity => (n, 1) dim.
+        y_true = np.expand_dims(y_true, axis=1)
+        # In multiclass, predicted is a list of vectors.
+        y_predicted = [y_predicted]
+        result = super().score(y_true, y_predicted)
+        for one_v_all_label, pred in zip(y_true.T, y_predicted.T):
+            fpr, tpr, thresholds = metrics.roc_curve(y_true=one_v_all_label, y_score=pred)
+            result.roc_fpr.append(fpr)
+            result.roc_tpr.append(tpr)
+            result.roc_thresholds.append(thresholds)
+        return result
 
 
 class MLExperimentEngine(object):

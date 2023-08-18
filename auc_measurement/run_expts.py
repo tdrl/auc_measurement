@@ -35,37 +35,6 @@ def is_complete() -> bool:
     return Path('.complete').exists()
 
 
-def score_predictions(y_true: np.ndarray, y_predicted: Union[np.ndarray, List[np.ndarray]]) -> Scores:
-    if type_of_target(y_true) == 'multiclass':
-        # We've trained in multiclass mode, but for ROC we need binary data. So we'll do
-        # one-vs-all for each label.
-        y_true = LabelBinarizer().fit(y_true).transform(y_true)  # type: ignore
-    elif type_of_target(y_true) == 'binary':
-        # Binary class => ground truth is (n,) shape. Insert a pseudo-dimension for uniformity => (n, 1) dim.
-        y_true = np.expand_dims(y_true, axis=1)
-        # In multiclass, predicted is a list of vectors.
-        y_predicted = [y_predicted]
-    else:
-        raise ExperimentConfigurationException('Not sure how we got to scoring without realizing '
-                                               'that this data set is neither binary nor '
-                                               'multiclass, but here we are. *shrug*')
-    roc_fpr = []
-    roc_tpr = []
-    roc_thresholds = []
-    for one_v_all_label, pred in zip(y_true.T, y_predicted):
-        fpr, tpr, thresholds = metrics.roc_curve(y_true=one_v_all_label, y_score=pred)
-        roc_fpr.append(fpr)
-        roc_tpr.append(tpr)
-        roc_thresholds.append(thresholds)
-    return Scores(
-        auc=float(metrics.roc_auc_score(y_true=y_true, y_score=y_predicted)),
-        f1=float(metrics.f1_score(y_true=y_true, y_pred=y_predicted)),
-        accuracy=float(metrics.accuracy_score(y_true=y_true, y_pred=y_predicted)),
-        roc_fpr=roc_fpr,
-        roc_tpr=roc_tpr,
-        roc_thresholds=roc_thresholds
-    )
-
 def fully_expand_params(params):
     """Helper function: Expand all nested objects in get_params() values.
 
