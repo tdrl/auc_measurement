@@ -64,13 +64,27 @@ class ScoreHandler(ABC):
       - MulticlassScoreHandler
     """
     @abstractmethod
-    def score(self, y_true: np.ndarray, y_predicted: np.ndarray) -> Scores:
-        # TODO(hlane): This probably needs to push down to base classes.
-        y_pred_thresh = y_predicted > 0.5
+    def score(self, y_true: np.ndarray, y_predicted_soft: np.ndarray, y_predicted_hard: np.ndarray) -> Scores:
+        """Compute all scores metrics for a given ground truth and sets of predictions.
+
+        This runs the entire set of metrics that we track - per scores.Scores - on model predictions.
+        Subclasses should handle logic distinguishing between binary and multiclass; the abstract base
+        handles metrics that apply to both.
+
+        Args:
+            y_true (np.ndarray): The ground truth labels.
+            y_predicted_soft (np.ndarray): "Soft" predictions - either probabilities (per predict_proba) or
+                decision thresholds, per decision_function().
+            y_predicted_hard (np.ndarray): "Hard" predictions - final predictions that have been cast to a
+                discrete label value via the classifier's predict() function.
+
+        Returns:
+            Scores: Container of all metric values.
+        """
         return Scores(
-            auc=float(metrics.roc_auc_score(y_true=y_true, y_score=y_predicted)),
-            f1=float(metrics.f1_score(y_true=y_true, y_pred=y_pred_thresh)),
-            accuracy=float(metrics.accuracy_score(y_true=y_true, y_pred=y_pred_thresh))
+            auc=float(metrics.roc_auc_score(y_true=y_true, y_score=y_predicted_soft)),
+            f1=float(metrics.f1_score(y_true=y_true, y_pred=y_predicted_hard)),
+            accuracy=float(metrics.accuracy_score(y_true=y_true, y_pred=y_predicted_hard))
         )
 
     @classmethod
@@ -86,9 +100,12 @@ class ScoreHandler(ABC):
 
 
 class BinaryScoreHandler(ScoreHandler):
-    def score(self, y_true: np.ndarray, y_predicted: np.ndarray) -> Scores:
-        result = super().score(y_true=y_true, y_predicted=y_predicted[:, 1])
-        fpr, tpr, thresholds = metrics.roc_curve(y_true=y_true, y_score=y_predicted[:, 1])
+    def score(self, y_true: np.ndarray, y_predicted_soft: np.ndarray, y_predicted_hard: np.ndarray) -> Scores:
+        y_predicted_soft = y_predicted_soft[:, 1]
+        result = super().score(y_true=y_true,
+                               y_predicted_soft=y_predicted_soft,
+                               y_predicted_hard=y_predicted_hard)
+        fpr, tpr, thresholds = metrics.roc_curve(y_true=y_true, y_score=y_predicted_soft)
         result.roc_fpr.append(fpr)
         result.roc_tpr.append(tpr)
         result.roc_thresholds.append(thresholds)

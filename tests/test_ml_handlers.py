@@ -128,9 +128,11 @@ class TestMlHandlers(TestCase):
     def test_score_binary(self):
         scorer = target.BinaryScoreHandler()
         dtree = tree.DecisionTreeClassifier()
-        dtree.fit(self._default_binary_dataset.data, self._default_binary_dataset.target)
-        y_pred = dtree.predict_proba(self._default_binary_dataset.data)
-        scores = scorer.score(self._default_binary_dataset.target, y_pred)
+        X, y_true = self._default_binary_dataset.data, self._default_binary_dataset.target
+        dtree.fit(X, y_true)
+        y_predicted_soft = dtree.predict_proba(X)
+        y_predicted_hard = dtree.predict(X)
+        scores = scorer.score(y_true, y_predicted_soft, y_predicted_hard)
         self.assertGreaterEqual(scores.auc, 0)
         self.assertLessEqual(scores.auc, 1)
         self.assertGreaterEqual(scores.f1, 0)
@@ -141,7 +143,7 @@ class TestMlHandlers(TestCase):
             ('thresholds', scores.roc_thresholds),
             ('fpr', scores.roc_fpr),
             ('tpr', scores.roc_tpr),
-            ]:
+        ]:
             self.assertIsInstance(roc_widget, list,
                                   msg=f'Failed type of {name} is list')
             self.assertEqual(len(roc_widget), 1,
@@ -151,12 +153,13 @@ class TestMlHandlers(TestCase):
             self.assertLessEqual(roc_widget[0].shape[0], self._default_binary_rows + 1,
                                  msg=f'Failed {name} vector no longer than data set')
 
-    def test_score_binary_random_data(self):
+    def test_score_binary_random_data_proba_model(self):
         scorer = target.BinaryScoreHandler()
         y_true = np.random.random_integers(0, 1, (self._default_binary_rows,))
-        y_pred = np.random.random_sample((self._default_binary_rows, 2))
-        y_pred = normalize(y_pred, norm='l1', axis=1)  # Ensure rows sum to 1.
-        scores = scorer.score(y_true, y_pred)
+        y_predicted_soft = np.random.random_sample((self._default_binary_rows, 2))
+        y_predicted_soft = normalize(y_predicted_soft, norm='l1', axis=1)  # Ensure rows sum to 1.
+        y_predicted_hard = np.random.randint(0, 1, (self._default_binary_rows))
+        scores = scorer.score(y_true, y_predicted_soft, y_predicted_hard)
         self.assertGreaterEqual(scores.auc, 0)
         self.assertLessEqual(scores.auc, 1)
         self.assertGreaterEqual(scores.f1, 0)
@@ -167,7 +170,7 @@ class TestMlHandlers(TestCase):
             ('thresholds', scores.roc_thresholds),
             ('fpr', scores.roc_fpr),
             ('tpr', scores.roc_tpr),
-            ]:
+        ]:
             self.assertIsInstance(roc_widget, list,
                                   msg=f'Failed type of {name} is list')
             self.assertEqual(len(roc_widget), 1,
@@ -177,6 +180,31 @@ class TestMlHandlers(TestCase):
             self.assertLessEqual(roc_widget[0].shape[0], self._default_binary_rows + 1,
                                  msg=f'Failed {name} vector no longer than data set')
 
+    def test_score_binary_random_data_decision_model(self):
+        scorer = target.BinaryScoreHandler()
+        y_true = np.random.random_integers(0, 1, (self._default_binary_rows,))
+        y_predicted_soft = np.random.exponential(scale=5.0, size=(self._default_binary_rows, 2)) - 0.5
+        y_predicted_hard = np.random.randint(0, 1, (self._default_binary_rows))
+        scores = scorer.score(y_true, y_predicted_soft, y_predicted_hard)
+        self.assertGreaterEqual(scores.auc, 0)
+        self.assertLessEqual(scores.auc, 1)
+        self.assertGreaterEqual(scores.f1, 0)
+        self.assertLessEqual(scores.f1, 1)
+        self.assertGreaterEqual(scores.accuracy, 0)
+        self.assertLessEqual(scores.accuracy, 1)
+        for name, roc_widget in [
+            ('thresholds', scores.roc_thresholds),
+            ('fpr', scores.roc_fpr),
+            ('tpr', scores.roc_tpr),
+        ]:
+            self.assertIsInstance(roc_widget, list,
+                                  msg=f'Failed type of {name} is list')
+            self.assertEqual(len(roc_widget), 1,
+                             msg=f'Failed length of {name} list = 1')
+            self.assertGreater(roc_widget[0].shape[0], 2,
+                               msg=f'Failed length of {name} vector is at least 2')
+            self.assertLessEqual(roc_widget[0].shape[0], self._default_binary_rows + 1,
+                                 msg=f'Failed {name} vector no longer than data set')
 
 if __name__ == '__main__':
     main()
