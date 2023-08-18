@@ -88,7 +88,7 @@ class ScoreHandler(ABC):
         )
 
     @classmethod
-    def score_handler_factory(cls, y_true: np.ndarray, y_predicted: np.ndarray) -> 'ScoreHandler':
+    def score_handler_factory(cls, y_true: np.ndarray) -> 'ScoreHandler':
         if type_of_target(y_true) == 'multiclass':
             return MulticlassScoreHandler()
         elif type_of_target(y_true) == 'binary':

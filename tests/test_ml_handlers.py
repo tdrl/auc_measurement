@@ -124,7 +124,17 @@ class TestMlHandlers(TestCase):
                              f'Failed on model = {model_name}')
             assert_array_almost_equal(yhat.sum(axis=1), np.ones((self._default_multiclass_rows,)),
                                       err_msg=f'Failed on model = {model_name}')
-      
+    
+    def test_scorer_factory_bin(self):
+        bin_y_data = np.concatenate([np.zeros((37,)), np.ones((28,))])
+        scorer = target.ScoreHandler.score_handler_factory(bin_y_data)
+        self.assertIsInstance(scorer, target.BinaryScoreHandler)
+
+    def test_scorer_factory_multiclass(self):
+        multi_y_data = np.repeat([0, 1, 2, 3, 4, 5], 8)  # Six classes
+        scorer = target.ScoreHandler.score_handler_factory(multi_y_data)
+        self.assertIsInstance(scorer, target.MulticlassScoreHandler)
+
     def test_score_binary(self):
         scorer = target.BinaryScoreHandler()
         dtree = tree.DecisionTreeClassifier()
