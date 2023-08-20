@@ -82,8 +82,11 @@ class ScoreHandler(ABC):
             Scores: Container of all metric values.
         """
         return Scores(
-            auc=float(metrics.roc_auc_score(y_true=y_true, y_score=y_predicted_soft)),
-            f1=float(metrics.f1_score(y_true=y_true, y_pred=y_predicted_hard)),
+            auc=float(metrics.roc_auc_score(y_true=y_true,
+                                            y_score=y_predicted_soft,
+                                            average='weighted',
+                                            multi_class='ovo')),
+            f1=float(metrics.f1_score(y_true=y_true, y_pred=y_predicted_hard, average='weighted')),
             accuracy=float(metrics.accuracy_score(y_true=y_true, y_pred=y_predicted_hard))
         )
 
@@ -113,16 +116,14 @@ class BinaryScoreHandler(ScoreHandler):
 
 
 class MulticlassScoreHandler(ScoreHandler):
-    def score(self, y_true: np.ndarray, y_predicted: np.ndarray) -> Scores:
+    def score(self, y_true: np.ndarray, y_predicted_soft: np.ndarray, y_predicted_hard: np.ndarray) -> Scores:
+        result = super().score(y_true=y_true,
+                               y_predicted_soft=y_predicted_soft,
+                               y_predicted_hard=y_predicted_hard)
         # We've trained in multiclass mode, but for ROC we need binary data. So we'll do
         # one-vs-all for each label.
         y_true = LabelBinarizer().fit(y_true).transform(y_true)  # type: ignore
-        # Binary class => ground truth is (n,) shape. Insert a pseudo-dimension for uniformity => (n, 1) dim.
-        y_true = np.expand_dims(y_true, axis=1)
-        # In multiclass, predicted is a list of vectors.
-        y_predicted = [y_predicted]
-        result = super().score(y_true, y_predicted)
-        for one_v_all_label, pred in zip(y_true.T, y_predicted.T):
+        for one_v_all_label, pred in zip(y_true.T, y_predicted_soft.T):
             fpr, tpr, thresholds = metrics.roc_curve(y_true=one_v_all_label, y_score=pred)
             result.roc_fpr.append(fpr)
             result.roc_tpr.append(tpr)

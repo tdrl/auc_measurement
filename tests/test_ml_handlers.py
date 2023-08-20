@@ -1,11 +1,11 @@
 """Unit tests for ml_handlers.py."""
 
-from unittest import TestCase, main
+from unittest import TestCase, main, skip
 from pathlib import Path
 from tempfile import mkdtemp
 from os import chdir
 from shutil import rmtree
-from sklearn import tree
+from sklearn import tree, svm
 from sklearn.datasets import make_classification
 from sklearn.preprocessing import normalize
 from sklearn.utils import Bunch
@@ -35,9 +35,9 @@ class TestMlHandlers(TestCase):
         X_bin, y_bin = make_classification(n_samples=self._default_binary_rows, n_classes=2)
         self._default_binary_dataset = Bunch(data=X_bin, target=y_bin)
         self._default_multiclass_rows = 100
-        self._default_multiclass_classes = 7
+        self._default_multiclass_n_classes = 7
         X_multi, y_multi = make_classification(n_samples=self._default_multiclass_rows,
-                                               n_classes=self._default_multiclass_classes,
+                                               n_classes=self._default_multiclass_n_classes,
                                                n_features=11,
                                                n_informative=9)
         self._default_multiclass_dataset = Bunch(data=X_multi, target=y_multi)
@@ -120,7 +120,7 @@ class TestMlHandlers(TestCase):
             handlers.set_model_by_name(model_name)
             handlers.fit_model(self._default_multiclass_dataset.data, self._default_multiclass_dataset.target)
             yhat = handlers.predict_soft(self._default_multiclass_dataset.data)
-            self.assertEqual(yhat.shape, (self._default_multiclass_rows, self._default_multiclass_classes),
+            self.assertEqual(yhat.shape, (self._default_multiclass_rows, self._default_multiclass_n_classes),
                              f'Failed on model = {model_name}')
             assert_array_almost_equal(yhat.sum(axis=1), np.ones((self._default_multiclass_rows,)),
                                       err_msg=f'Failed on model = {model_name}')
@@ -135,13 +135,49 @@ class TestMlHandlers(TestCase):
         scorer = target.ScoreHandler.score_handler_factory(multi_y_data)
         self.assertIsInstance(scorer, target.MulticlassScoreHandler)
 
-    def test_score_binary(self):
+    def test_score_factory_dispatch(self):
+        self.assertIsInstance(target.ScoreHandler.score_handler_factory(self._default_binary_dataset.target),
+                              target.BinaryScoreHandler)
+        self.assertIsInstance(target.ScoreHandler.score_handler_factory(self._default_multiclass_dataset.target),
+                              target.MulticlassScoreHandler)
+
+    def test_score_binary_proba(self):
         scorer = target.BinaryScoreHandler()
         dtree = tree.DecisionTreeClassifier()
         X, y_true = self._default_binary_dataset.data, self._default_binary_dataset.target
         dtree.fit(X, y_true)
         y_predicted_soft = dtree.predict_proba(X)
         y_predicted_hard = dtree.predict(X)
+        scores = scorer.score(y_true, y_predicted_soft, y_predicted_hard)
+        self.assertGreaterEqual(scores.auc, 0)
+        self.assertLessEqual(scores.auc, 1)
+        self.assertGreaterEqual(scores.f1, 0)
+        self.assertLessEqual(scores.f1, 1)
+        self.assertGreaterEqual(scores.accuracy, 0)
+        self.assertLessEqual(scores.accuracy, 1)
+        for name, roc_widget in [
+            ('thresholds', scores.roc_thresholds),
+            ('fpr', scores.roc_fpr),
+            ('tpr', scores.roc_tpr),
+        ]:
+            self.assertIsInstance(roc_widget, list,
+                                  msg=f'Failed type of {name} is list')
+            self.assertEqual(len(roc_widget), 1,
+                             msg=f'Failed length of {name} list = 1')
+            self.assertGreater(roc_widget[0].shape[0], 2,
+                               msg=f'Failed length of {name} vector is at least 2')
+            self.assertLessEqual(roc_widget[0].shape[0], self._default_binary_rows + 1,
+                                 msg=f'Failed {name} vector no longer than data set')
+
+    def test_score_binary_decision_predictor(self):
+        scorer = target.BinaryScoreHandler()
+        svc = svm.SVC()
+        X, y_true = self._default_binary_dataset.data, self._default_binary_dataset.target
+        svc.fit(X, y_true)
+        y_predicted_hard = svc.predict(X)
+        # TODO(hlane): This is a mess. decision_function returns an (n,) vector, while predict_proba
+        # returns a (n, k) matrix (for a k-class prediction). For the moment, gang it up here.
+        y_predicted_soft = np.stack((np.zeros_like(y_predicted_hard), svc.decision_function(X)), axis=1)
         scores = scorer.score(y_true, y_predicted_soft, y_predicted_hard)
         self.assertGreaterEqual(scores.auc, 0)
         self.assertLessEqual(scores.auc, 1)
@@ -215,6 +251,70 @@ class TestMlHandlers(TestCase):
                                msg=f'Failed length of {name} vector is at least 2')
             self.assertLessEqual(roc_widget[0].shape[0], self._default_binary_rows + 1,
                                  msg=f'Failed {name} vector no longer than data set')
+
+    def test_score_multiclass_proba_predictor(self):
+        scorer = target.MulticlassScoreHandler()
+        dtree = tree.DecisionTreeClassifier()
+        X, y_true = self._default_multiclass_dataset.data, self._default_multiclass_dataset.target
+        dtree.fit(X, y_true)
+        y_predicted_soft = dtree.predict_proba(X)
+        y_predicted_hard = dtree.predict(X)
+        scores = scorer.score(y_true=y_true,
+                              y_predicted_soft=y_predicted_soft,
+                              y_predicted_hard=y_predicted_hard)
+        self.assertGreaterEqual(scores.auc, 0)
+        self.assertLessEqual(scores.auc, 1)
+        self.assertGreaterEqual(scores.f1, 0)
+        self.assertLessEqual(scores.f1, 1)
+        self.assertGreaterEqual(scores.accuracy, 0)
+        self.assertLessEqual(scores.accuracy, 1)
+        for name, roc_widget in [
+            ('thresholds', scores.roc_thresholds),
+            ('fpr', scores.roc_fpr),
+            ('tpr', scores.roc_tpr),
+        ]:
+            self.assertIsInstance(roc_widget, list,
+                                  msg=f'Failed type of {name} is list')
+            self.assertEqual(len(roc_widget), self._default_multiclass_n_classes,
+                             msg=f'Failed length of {name} list = {self._default_multiclass_n_classes}')
+            for idx, r in enumerate(roc_widget):
+                self.assertGreater(r.shape[0], 2,
+                                   msg=f'Failed length of {name}[{idx}] vector is at least 2')
+                self.assertLessEqual(r.shape[0], self._default_multiclass_rows + 1,
+                                     msg=f'Failed {name}[{idx}] vector no longer than data set')
+
+    @skip('Decision function not supported for multiclass roc_auc.')
+    def test_score_multiclass_decision_predictor(self):
+        scorer = target.MulticlassScoreHandler()
+        svc = svm.SVC()
+        X, y_true = self._default_multiclass_dataset.data, self._default_multiclass_dataset.target
+        svc.fit(X, y_true)
+        y_predicted_soft = svc.decision_function(X)
+        y_predicted_hard = svc.predict(X)
+        scores = scorer.score(y_true=y_true,
+                              y_predicted_soft=y_predicted_soft,
+                              y_predicted_hard=y_predicted_hard)
+        self.assertGreaterEqual(scores.auc, 0)
+        self.assertLessEqual(scores.auc, 1)
+        self.assertGreaterEqual(scores.f1, 0)
+        self.assertLessEqual(scores.f1, 1)
+        self.assertGreaterEqual(scores.accuracy, 0)
+        self.assertLessEqual(scores.accuracy, 1)
+        for name, roc_widget in [
+            ('thresholds', scores.roc_thresholds),
+            ('fpr', scores.roc_fpr),
+            ('tpr', scores.roc_tpr),
+        ]:
+            self.assertIsInstance(roc_widget, list,
+                                  msg=f'Failed type of {name} is list')
+            self.assertEqual(len(roc_widget), self._default_multiclass_n_classes,
+                             msg=f'Failed length of {name} list = {self._default_multiclass_n_classes}')
+            for idx, r in enumerate(roc_widget):
+                self.assertGreater(r.shape[0], 2,
+                                   msg=f'Failed length of {name}[{idx}] vector is at least 2')
+                self.assertLessEqual(r.shape[0], self._default_multiclass_rows + 1,
+                                     msg=f'Failed {name}[{idx}] vector no longer than data set')
+
 
 if __name__ == '__main__':
     main()
