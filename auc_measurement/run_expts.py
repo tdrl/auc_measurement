@@ -16,7 +16,7 @@ from datetime import datetime
 
 from auc_measurement.config import Config, load_config
 from auc_measurement.dir_stack import dir_stack_push
-from auc_measurement.ml_handlers import MLExperimentEngine, ExperimentConfigurationException
+from auc_measurement.ml_handlers import MLExperimentEngine, ExperimentConfigurationException, ScoreHandler
 from auc_measurement.registries import DATA_LOADER_REGISTRY
 from auc_measurement.scores import Scores
 from auc_measurement.version import get_version
@@ -73,9 +73,12 @@ def run_one_model(X, y, expt_handlers: MLExperimentEngine):
             dump(expt_handlers.model, 'model.joblib')
             dump(y[test], 'ground_truth_labels.joblib')
             logging.info('    Predicting on test fold...')
-            y_predicted = expt_handlers.predict_soft(X=X[test])
-            dump(y_predicted, 'predictions.joblib')
-            scores = score_predictions(y_true=y[test], y_predicted=y_predicted)
+            y_predicted_soft = expt_handlers.predict_soft(X=X[test])
+            dump(y_predicted_soft, 'predictions_soft.joblib')
+            y_predicted_hard = expt_handlers.predict_hard(X=X[test])
+            dump(y_predicted_hard, 'predictions_hard.joblib')
+            scorer = ScoreHandler.score_handler_factory(y[test])
+            scores = scorer.score(y_true=y[test], y_predicted_soft=y_predicted_soft, y_predicted_hard=y_predicted_hard)
             with open('final_scores.json', 'w') as scores_out:
                 scores_out.write(scores.to_json(indent=2))  # type: ignore
             logging.info('    Done.')

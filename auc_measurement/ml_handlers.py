@@ -226,6 +226,8 @@ class MLExperimentEngine(object):
         Returns:
             np.ndarray: Predicted confidence/margin/soft values.
         """
+        # Note: I thought we'd support decision_function, but it's hard to make it work in all cases -
+        # roc_auc_score() doesn't support it for the multiclass case. Bleh.
         if self.model is None:
             raise ValueError('You need to set a model in the MLExperimentHandlerSet before calling predict_soft.')
         if hasattr(self.model, 'predict_proba'):
@@ -234,3 +236,17 @@ class MLExperimentEngine(object):
         else:
             raise ExperimentConfigurationException(f"Model {self.model_name} doesn't have a predict_proba() "
                                                    f"method. I don't know what to do with such a model.")
+
+    def predict_hard(self, X: np.ndarray) -> np.ndarray:
+        """Predict concrete class values.
+
+        This just returns the model.predict() values. It exists for symmetry with predict_soft() and
+        to provide a prediction API at the MLExperimentEngine level.
+
+        Args:
+            X (np.ndarray): Feature data matrix.
+
+        Returns:
+            np.ndarray: Class label vector of shape (n,)
+        """
+        return self.model.predict(X)  # type: ignore
