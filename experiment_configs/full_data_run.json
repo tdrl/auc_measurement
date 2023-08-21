@@ -1,0 +1,61 @@
+{
+    "experiments_output_dir": "~/private/docs/research/auc_measurement/experiment_results/${TIMESTAMP}",
+    "logging_config_file": "~/private/src/python/auc_measurement/experiment_configs/default_logging_config.json",
+    "datasets": [
+        "breast_cancer",
+        "digits",
+        "iris",
+        "wine",
+        "news",
+        "covtype",
+        "kddcup99",
+        "lfw_pairs",
+        "lfw_people",
+        "olivetti_faces",
+        "rcv1"
+        ],
+    "models_to_test": {
+        "AdaBoostClassifier": {},
+        "BaggingClassifier": {},
+        "BernoulliNB": {},
+        "CategoricalNB": {},
+        "ComplementNB": {},
+        "DecisionTreeClassifier": {},
+        "ExtraTreeClassifier": {},
+        "ExtraTreesClassifier": {},
+        "GaussianNB": {},
+        "PassiveAggressiveClassifier": {},
+        "Perceptron": {},
+        "QuadraticDiscriminantAnalysis": {},
+        "RadiusNeighborsClassifier": {},
+        "RandomForestClassifier": {},
+        "RidgeClassifier": {},
+        "RidgeClassifierCV": {},
+        "SGDClassifier": {},
+        "SVC": {},
+        "StackingClassifier": {},
+        "VotingClassifier": {},
+        "GaussianProcessClassifier": {},
+        "GradientBoostingClassifier": {},
+        "HistGradientBoostingClassifier": {},
+        "KNeighborsClassifier": {},
+        "LinearDiscriminantAnalysis": {},
+        "LinearSVC": {},
+        "LogisticRegression": {},
+        "LogisticRegressionCV": {},
+        "MLPClassifier": {},
+        "MultinomialNB": {},
+        "NearestCentroid": {},
+        "NuSVC": {}
+    },
+    "small_data": {
+        "folds": 10,
+        "calibration_folds": 5,
+        "calibration_type": "sigmoid"
+    },
+    "large_data": {
+        "folds": 2,
+        "calibration_folds": 2,
+        "calibration_type": "isotonic"
+    }
+}

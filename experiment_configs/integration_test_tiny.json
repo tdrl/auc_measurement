@@ -1,0 +1,20 @@
+{
+    "experiments_output_dir": "/tmp/heather/expt_integration_tiny",
+    "logging_config_file": "~/private/src/python/auc_measurement/experiment_configs/default_logging_config.json",
+    "datasets": [
+        "wine"
+    ],
+    "models_to_test": {
+        "logistic": {}
+    },
+    "small_data": {
+        "folds": 4,
+        "calibration_folds": 2,
+        "calibration_type": "sigmoid"
+    },
+    "large_data": {
+        "folds": 2,
+        "calibration_folds": 2,
+        "calibration_type": "isotonic"
+    }
+}
