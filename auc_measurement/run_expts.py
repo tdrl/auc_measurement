@@ -6,6 +6,7 @@ from sys import argv
 import json
 from typing import Union, List, Mapping, Iterable
 import logging
+from logging.config import dictConfig
 import numpy as np
 from sklearn.utils import Bunch
 from sklearn.preprocessing import StandardScaler, LabelBinarizer
@@ -134,12 +135,6 @@ def run_all_expts(config: Config):
 
 
 def main(config=None):
-    # TODO(hlane) Configure logging smarter.
-    logging.basicConfig(format='{levelname}|{asctime}] {message}',
-                        level=logging.INFO,
-                        style='{',
-                        datefmt='%Y-%m-%d:%H:%M:%S')
-    logging.info('Starting.')
     if config is None:
         try:
             config = load_config(argv[1])
@@ -147,9 +142,18 @@ def main(config=None):
             logging.error('Usage: python run_expts config_file.json')
             raise
     expt_dir = Path(config.experiments_output_dir)
-    logging.info('Creating experiment output dir at %s',
-                 config.experiments_output_dir)
-    with dir_stack_push(expt_dir, force_create=True) as _:
+    with dir_stack_push(expt_dir, force_create=True):
+        if config.logging_config_file is not None:
+            with open(config.logging_config_file, 'r') as config_in:
+                dictConfig(json.load(config_in))
+        else:
+            logging.basicConfig(format='{levelname}|{asctime}] {message}',
+                                level=logging.INFO,
+                                style='{',
+                                datefmt='%Y-%m-%d:%H:%M:%S')
+        logging.info('Starting.')
+        logging.info('Created experiment output dir at %s',
+                     config.experiments_output_dir)
         if is_complete():
             logging.info('All experiments already marked done. Stopping immediately.')
             return

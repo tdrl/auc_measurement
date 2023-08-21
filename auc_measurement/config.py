@@ -2,8 +2,10 @@
 
 from dataclasses import dataclass, field
 from dataclasses_json import dataclass_json
+from os.path import expanduser, expandvars
 from pathlib import Path
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Optional
+
 
 
 @dataclass_json
@@ -20,6 +22,7 @@ class ExptParams:
 class Config:
     """Parameters governing an overall experiment run."""
     experiments_output_dir: str
+    logging_config_file: Optional[str] = None
     random_seed: int = 3263827
     large_data_threshold: int = 10000
     datasets: List[str] = field(default_factory=list)
@@ -31,6 +34,13 @@ class Config:
 def load_config(config_fname: Union[str, Path]) -> Config:
     """Load a configuration from file.
 
+    This also does tilde expansion and environment variable expansion on the Config fields:
+        - experiments_output_dir
+        - logging_config_file
+
+    NOTE: By virtue of using expandvars(), this is an inherently risky function. Don't use
+    it in an untrusted environment.
+
     Args:
         config_fname (Union[str, Path]): Location to load from.
 
@@ -41,4 +51,8 @@ def load_config(config_fname: Union[str, Path]) -> Config:
     # for a highly nested field, so it fails to deserialze bool model parameters
     # correctly. We'll skip this for the moment until/unless we need such a param.
     with open(config_fname, 'r') as raw:
-        return Config.schema().loads(raw.read())  # type: ignore
+        config: Config = Config.schema().loads(raw.read())  # type: ignore
+    config.experiments_output_dir = expanduser(expandvars(config.experiments_output_dir))
+    if config.logging_config_file is not None:
+        config.logging_config_file = expanduser(expandvars(config.logging_config_file))
+    return config

@@ -1,5 +1,6 @@
 {
     "experiments_output_dir": "/tmp/heather/expt_integration_small",
+    "logging_config_file": "~/private/src/python/auc_measurement/experiment_configs/default_logging_config.json",
     "datasets": [
         "iris",
         "wine"

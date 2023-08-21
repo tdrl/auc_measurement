@@ -1,8 +1,15 @@
 {
     "version": 1,
+    "disable_existing_loggers": false,
     "formatters": {
         "default_msg_format": {
-            "format": "{levelname}|{asctime}]{message}",
+            "format": "{levelname}|{asctime}] {message}",
+            "datefmt": "%Y-%m-%d:%H:%M:%S",
+            "style": "{",
+            "validate": true
+        },
+        "err_msg_format": {
+            "format": "{levelname}|{asctime}]({module}|{lineno}) {message}",
             "datefmt": "%Y-%m-%d:%H:%M:%S",
             "style": "{",
             "validate": true
@@ -12,33 +19,36 @@
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "default_msg_format",
-            "stream": "ext://sys.stdout"
+            "stream": "ext://sys.stdout",
+            "level": "INFO"
         },
         "all_msg_file": {
             "class": "logging.handlers.RotatingFileHandler",
             "formatter": "default_msg_format",
             "filename": "full_expt_logs.log",
             "maxBytes": 8388608,
-            "backupCount": 10
+            "backupCount": 10,
+            "level": "DEBUG"
         },
         "err_file": {
-            "class": "logging.handlers.FileHandler",
-            "formatter": "default_msg_format",
-            "filename": "err_logs.log"
+            "class": "logging.FileHandler",
+            "formatter": "err_msg_format",
+            "filename": "err_logs.log",
+            "level": "WARNING"
         }
     },
     "loggers": {
-        "auc_measurement.console": {
-            "level": "INFO",
-            "handlers": ["console"]
-        },
-        "auc_measurement.all_msgs": {
+        "": {
             "level": "DEBUG",
-            "handlers": ["all_msg_file"]
+            "handlers": ["console", "all_msg_file", "err_file"]
         },
-        "auc_measurement.err_msgs": {
-            "level": "WARNING",
-            "handlers": ["err_file"]
+        "auc_measurement": {
+            "level": "DEBUG",
+            "handlers": ["console", "all_msg_file", "err_file"]
+        },
+        "__main__": {
+            "level": "DEBUG",
+            "handlers": ["console", "all_msg_file", "err_file"]
         }
     }
 }
