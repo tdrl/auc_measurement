@@ -128,12 +128,7 @@ def run_all_expts(config: Config):
         try:
             expt_handlers = MLExperimentEngine(config=config, dataset=dataset, dataset_base_name=dataset_name)
             expt_handlers.add_preprocessor('ScaleData', StandardScaler())
-            if expt_handlers.y_type == 'multiclass':
-                logging.info(f'  Dataset {dataset_name} is multiclass; training both raw and one-vs-all')
-                run_one_dataset(config, expt_handlers, dataset_name + '_raw', dataset)
-                expt_handlers.add_preprocessor('BinarizeLabels', LabelBinarizer())
-                run_one_dataset(config, expt_handlers, dataset_name + '_one_v_all', dataset)
-                expt_handlers.remove_preprocessor('BinarizeLabels')
+            run_one_dataset(config, expt_handlers, dataset_name, dataset)
         except ExperimentConfigurationException:
             pass
 
