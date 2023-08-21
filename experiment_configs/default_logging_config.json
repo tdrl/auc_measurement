@@ -1,0 +1,44 @@
+{
+    "version": 1,
+    "formatters": {
+        "default_msg_format": {
+            "format": "{levelname}|{asctime}]{message}",
+            "datefmt": "%Y-%m-%d:%H:%M:%S",
+            "style": "{",
+            "validate": true
+        }
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "default_msg_format",
+            "stream": "ext://sys.stdout"
+        },
+        "all_msg_file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "formatter": "default_msg_format",
+            "filename": "full_expt_logs.log",
+            "maxBytes": 8388608,
+            "backupCount": 10
+        },
+        "err_file": {
+            "class": "logging.handlers.FileHandler",
+            "formatter": "default_msg_format",
+            "filename": "err_logs.log"
+        }
+    },
+    "loggers": {
+        "auc_measurement.console": {
+            "level": "INFO",
+            "handlers": ["console"]
+        },
+        "auc_measurement.all_msgs": {
+            "level": "DEBUG",
+            "handlers": ["all_msg_file"]
+        },
+        "auc_measurement.err_msgs": {
+            "level": "WARNING",
+            "handlers": ["err_file"]
+        }
+    }
+}
