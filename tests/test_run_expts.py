@@ -73,6 +73,10 @@ class TestRunExpts(TestCase):
                 complete_data = json.load(c_in)
             self.assertRegex(complete_data['timestamp'], r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z.*')
             self.assertRegex(complete_data['version'], r'\d+\.\d+.\d+')
+            self.assertIn('git-info', complete_data)
+            self.assertIn('commit-hash', complete_data['git-info'])
+            self.assertIn('repo', complete_data['git-info'])
+            self.assertIn('branch', complete_data['git-info'])
 
 
 if __name__ == '__main__':
