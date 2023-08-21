@@ -19,13 +19,14 @@ from auc_measurement.dir_stack import dir_stack_push
 from auc_measurement.ml_handlers import MLExperimentEngine, ExperimentConfigurationException, ScoreHandler
 from auc_measurement.registries import DATA_LOADER_REGISTRY
 from auc_measurement.scores import Scores
-from auc_measurement.version import get_version
+from auc_measurement.version import get_version, get_git_info
 
 
 def mark_complete():
     completion_data = {
         'version': get_version(),
         'timestamp': datetime.utcnow().strftime('%FT%TZ'),
+        'git-info': get_git_info(),
     }
     with open('.complete', 'w') as c_out:
         json.dump(completion_data, c_out)
