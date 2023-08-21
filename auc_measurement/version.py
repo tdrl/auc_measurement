@@ -2,10 +2,11 @@
 
 This roots into the 'version' field set in the pyproject.toml file."""
 
+from importlib.resources import files as resource_files
+import json
 from pathlib import Path
 from toml import load
 from typing import Dict
-import subprocess
 
 
 _VERSION = None
@@ -32,30 +33,14 @@ def get_git_info() -> Dict[str, str]:
         Dict[str, str]: Dictionary of git info, with the keys:
             - 'repo': Remote origin URL
             - 'branch': Current branch
-            - 'hash': Git commit hash for HEAD
+            - 'commit-hash': Git commit hash for HEAD
     """
     try:
-        repo_info = subprocess.run(args=['git', 'config', '--get',' remote.origin.url'],
-                                   capture_output=True,
-                                   text=True)
-        repo_info.check_returncode()
-        branch_info = subprocess.run(args=['git', 'branch', '--show-current'],
-                                     capture_output=True,
-                                     text=True)
-        branch_info.check_returncode()
-        commit_hash_info = subprocess.run(args=['git', 'rev-parse', 'HEAD'],
-                                          capture_output=True,
-                                          text=True)
-        commit_hash_info.check_returncode()
-        result = {
-            'repo': repo_info.stdout.strip(),
-            'branch': branch_info.stdout.strip(),
-            'hash': commit_hash_info.stdout.strip(),
-        }
-    except (IOError, subprocess.CalledProcessError):
+        result = json.loads(resource_files('auc_measurement').joinpath('resources/git_info.json').read_text())
+    except IOError:
         result = {
             'repo': '<unknown>',
             'branch': '<unknown>',
-            'hash': '<unknown>',
+            'commit-hash': '<unknown>',
         }
     return result
