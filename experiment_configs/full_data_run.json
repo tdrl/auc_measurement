@@ -18,6 +18,8 @@
         "AdaBoostClassifier": {},
         "BaggingClassifier": {},
         "BernoulliNB": {},
+        "CategoricalNB": {},
+        "ComplementNB": {},
         "DecisionTreeClassifier": {},
         "ExtraTreeClassifier": {},
         "ExtraTreesClassifier": {},

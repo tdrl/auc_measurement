@@ -12,10 +12,26 @@ from sklearn.preprocessing import normalize, MaxAbsScaler, MinMaxScaler, Standar
 from sklearn.utils import Bunch
 import numpy as np
 from numpy.testing import assert_array_almost_equal
+from dataclasses import dataclass, field
 
 from auc_measurement.config import Config
 import auc_measurement.ml_handlers as target
 import auc_measurement.registries as reg
+
+
+@dataclass
+class DatasetDefinition(object):
+    """A convenience wrapper to hold common information about various test datasets."""
+    name: str
+    n_features: int
+    n_rows: int
+    n_classes: int
+    X: np.ndarray
+    y: np.ndarray
+    dataset: Bunch = field(init=False)
+
+    def __post_init__(self):
+        self.dataset = Bunch(data=self.X, target=self.y)
 
 
 class TestMlHandlers(TestCase):
@@ -32,11 +48,31 @@ class TestMlHandlers(TestCase):
         # Dataset sizes chosen to that (a) they're both SMALL, and (b) there're enough samples so that
         # each class has a reasonable number of exemplars. (Specifically, we have at least 5 examples of
         # each class after CV splitting).
-        self._default_binary_rows = 40
-        X_bin, y_bin = make_classification(n_samples=self._default_binary_rows, n_classes=2)
-        self._default_binary_dataset = Bunch(data=X_bin, target=y_bin)
+        X_bin, y_bin = make_classification(n_samples=40, n_features=20, n_classes=2)
+        X_sparse = sparse.rand(m=1000, n=100, density=0.01, format='coo')
+        y_sparse = np.random.randint(0, 2, size=(100,))
+        self._default_sparse_dataset = Bunch(data=X_sparse, target=y_sparse)
+        self.all_datasets = {
+            'binary': DatasetDefinition(name='binary',
+                                        n_rows=X_bin.shape[0],
+                                        n_features=X_bin.shape[1],
+                                        n_classes=2,
+                                        X=X_bin,
+                                        y=y_bin),
+            'sparse': DatasetDefinition(name='sparse',
+                                        n_rows=X_sparse.shape[0],
+                                        n_features=X_sparse.shape[1],
+                                        n_classes=2,
+                                        X=X_sparse,  # type: ignore
+                                        y=y_sparse)
+        }
         self._default_multiclass_rows = 100
         self._default_multiclass_n_classes = 7
+        self._default_nonnegative_rows = 40
+        self._default_nonnegative_features = 10
+        X_nonnegative = np.random.random_sample(size=(self._default_nonnegative_rows, self._default_nonnegative_features))
+        y_nonnegative =  np.random.randint(0, 2, size=(self._default_nonnegative_rows,))
+        self._default_nonnegative_dataset = Bunch(data=X_nonnegative, target=y_nonnegative)
         X_multi, y_multi = make_classification(n_samples=self._default_multiclass_rows,
                                                n_classes=self._default_multiclass_n_classes,
                                                n_features=11,
@@ -74,7 +110,7 @@ class TestMlHandlers(TestCase):
 
     def test_add_remove_preprocessors(self):
         handlers = target.MLExperimentEngine(config=self._default_config,
-                                             dataset=self._default_binary_dataset,
+                                             dataset=self.all_datasets['binary'].dataset,
                                              dataset_base_name='testData')
         self.assertEqual(len(handlers.preprocessors), 0)
         handlers.add_preprocessor('foo', None)  # type: ignore
@@ -89,29 +125,29 @@ class TestMlHandlers(TestCase):
 
     def test_set_model_exception_if_unknown_model_name(self):
         handlers = target.MLExperimentEngine(config=self._default_config,
-                                             dataset=self._default_binary_dataset,
+                                             dataset=self.all_datasets['binary'].dataset,
                                              dataset_base_name='testData')
         with self.assertRaisesRegex(target.ExperimentConfigurationException, r'blurfle'):
             handlers.set_model_by_name('blurfle')
 
     def test_predict_soft_error_if_model_unset(self):
         handlers = target.MLExperimentEngine(config=self._default_config,
-                                             dataset=self._default_binary_dataset,
+                                             dataset=self.all_datasets['binary'].dataset,
                                              dataset_base_name='testData')
         with self.assertRaises(ValueError):
-            handlers.predict_soft(self._default_binary_dataset.data)
+            handlers.predict_soft(self.all_datasets['binary'].dataset.data)
 
     def test_predict_all_classifiers_binary(self):
         engine = target.MLExperimentEngine(config=self._default_config,
-                                           dataset=self._default_binary_dataset,
+                                           dataset=self.all_datasets['binary'].dataset,
                                            dataset_base_name='testData')
         for model_name in target.MODEL_REGISTRY:
             engine.set_model_by_name(model_name)
-            engine.setup_model_pre_post_processors(self._default_binary_dataset)
-            engine.fit_model(self._default_binary_dataset.data, self._default_binary_dataset.target)
-            yhat = engine.predict_soft(self._default_binary_dataset.data)
-            self.assertEqual(yhat.shape, (self._default_binary_rows, 2), f'Failed on model = {model_name}')
-            assert_array_almost_equal(yhat.sum(axis=1), np.ones((self._default_binary_rows,)),
+            engine.setup_model_pre_post_processors(self.all_datasets['binary'].dataset)
+            engine.fit_model(self.all_datasets['binary'].dataset.data, self.all_datasets['binary'].dataset.target)
+            yhat = engine.predict_soft(self.all_datasets['binary'].dataset.data)
+            self.assertEqual(yhat.shape, (self.all_datasets['binary'].n_rows, 2), f'Failed on model = {model_name}')
+            assert_array_almost_equal(yhat.sum(axis=1), np.ones((self.all_datasets['binary'].n_rows,)),
                                       err_msg=f'Failed on model = {model_name}')
 
     def test_predict_all_classifiers_multiclass(self):
@@ -139,7 +175,7 @@ class TestMlHandlers(TestCase):
         self.assertIsInstance(scorer, target.MulticlassScoreHandler)
 
     def test_score_factory_dispatch(self):
-        self.assertIsInstance(target.ScoreHandler.score_handler_factory(self._default_binary_dataset.target),
+        self.assertIsInstance(target.ScoreHandler.score_handler_factory(self.all_datasets['binary'].y),
                               target.BinaryScoreHandler)
         self.assertIsInstance(target.ScoreHandler.score_handler_factory(self._default_multiclass_dataset.target),
                               target.MulticlassScoreHandler)
@@ -147,11 +183,11 @@ class TestMlHandlers(TestCase):
     def test_score_binary_proba(self):
         scorer = target.BinaryScoreHandler()
         dtree = tree.DecisionTreeClassifier()
-        X, y_true = self._default_binary_dataset.data, self._default_binary_dataset.target
+        X, y_true = self.all_datasets['binary'].X, self.all_datasets['binary'].y
         dtree.fit(X, y_true)
         y_predicted_soft = dtree.predict_proba(X)
         y_predicted_hard = dtree.predict(X)
-        scores = scorer.score(y_true, y_predicted_soft, y_predicted_hard)
+        scores = scorer.score(y_true, y_predicted_soft, y_predicted_hard)  # type: ignore
         self.assertGreaterEqual(scores.auc, 0)
         self.assertLessEqual(scores.auc, 1)
         self.assertGreaterEqual(scores.f1, 0)
@@ -169,13 +205,13 @@ class TestMlHandlers(TestCase):
                              msg=f'Failed length of {name} list = 1')
             self.assertGreater(roc_widget[0].shape[0], 2,
                                msg=f'Failed length of {name} vector is at least 2')
-            self.assertLessEqual(roc_widget[0].shape[0], self._default_binary_rows + 1,
+            self.assertLessEqual(roc_widget[0].shape[0], self.all_datasets['binary'].n_rows + 1,
                                  msg=f'Failed {name} vector no longer than data set')
 
     def test_score_binary_decision_predictor(self):
         scorer = target.BinaryScoreHandler()
         svc = svm.SVC()
-        X, y_true = self._default_binary_dataset.data, self._default_binary_dataset.target
+        X, y_true = self.all_datasets['binary'].X, self.all_datasets['binary'].y
         svc.fit(X, y_true)
         y_predicted_hard = svc.predict(X)
         # TODO(hlane): This is a mess. decision_function returns an (n,) vector, while predict_proba
@@ -199,16 +235,16 @@ class TestMlHandlers(TestCase):
                              msg=f'Failed length of {name} list = 1')
             self.assertGreater(roc_widget[0].shape[0], 2,
                                msg=f'Failed length of {name} vector is at least 2')
-            self.assertLessEqual(roc_widget[0].shape[0], self._default_binary_rows + 1,
+            self.assertLessEqual(roc_widget[0].shape[0], self.all_datasets['binary'].n_rows + 1,
                                  msg=f'Failed {name} vector no longer than data set')
 
     def test_score_binary_random_data_proba_model(self):
         scorer = target.BinaryScoreHandler()
-        y_true = np.random.random_integers(0, 1, (self._default_binary_rows,))
-        y_predicted_soft = np.random.random_sample((self._default_binary_rows, 2))
+        y_true = np.random.random_integers(0, 1, (self.all_datasets['binary'].n_rows,))
+        y_predicted_soft = np.random.random_sample((self.all_datasets['binary'].n_rows, 2))
         y_predicted_soft = normalize(y_predicted_soft, norm='l1', axis=1)  # Ensure rows sum to 1.
-        y_predicted_hard = np.random.randint(0, 1, (self._default_binary_rows))
-        scores = scorer.score(y_true, y_predicted_soft, y_predicted_hard)
+        y_predicted_hard = np.random.randint(0, 1, (self.all_datasets['binary'].n_rows))
+        scores = scorer.score(y_true, y_predicted_soft, y_predicted_hard)  # type: ignore
         self.assertGreaterEqual(scores.auc, 0)
         self.assertLessEqual(scores.auc, 1)
         self.assertGreaterEqual(scores.f1, 0)
@@ -226,14 +262,14 @@ class TestMlHandlers(TestCase):
                              msg=f'Failed length of {name} list = 1')
             self.assertGreater(roc_widget[0].shape[0], 2,
                                msg=f'Failed length of {name} vector is at least 2')
-            self.assertLessEqual(roc_widget[0].shape[0], self._default_binary_rows + 1,
+            self.assertLessEqual(roc_widget[0].shape[0], self.all_datasets['binary'].n_rows + 1,
                                  msg=f'Failed {name} vector no longer than data set')
 
     def test_score_binary_random_data_decision_model(self):
         scorer = target.BinaryScoreHandler()
-        y_true = np.random.random_integers(0, 1, (self._default_binary_rows,))
-        y_predicted_soft = np.random.exponential(scale=5.0, size=(self._default_binary_rows, 2)) - 0.5
-        y_predicted_hard = np.random.randint(0, 1, (self._default_binary_rows))
+        y_true = np.random.random_integers(0, 1, (self.all_datasets['binary'].n_rows,))
+        y_predicted_soft = np.random.exponential(scale=5.0, size=(self.all_datasets['binary'].n_rows, 2)) - 0.5
+        y_predicted_hard = np.random.randint(0, 1, (self.all_datasets['binary'].n_rows))
         scores = scorer.score(y_true, y_predicted_soft, y_predicted_hard)
         self.assertGreaterEqual(scores.auc, 0)
         self.assertLessEqual(scores.auc, 1)
@@ -252,7 +288,7 @@ class TestMlHandlers(TestCase):
                              msg=f'Failed length of {name} list = 1')
             self.assertGreater(roc_widget[0].shape[0], 2,
                                msg=f'Failed length of {name} vector is at least 2')
-            self.assertLessEqual(roc_widget[0].shape[0], self._default_binary_rows + 1,
+            self.assertLessEqual(roc_widget[0].shape[0], self.all_datasets['binary'].n_rows + 1,
                                  msg=f'Failed {name} vector no longer than data set')
 
     def test_score_multiclass_proba_predictor(self):
@@ -263,7 +299,7 @@ class TestMlHandlers(TestCase):
         y_predicted_soft = dtree.predict_proba(X)
         y_predicted_hard = dtree.predict(X)
         scores = scorer.score(y_true=y_true,
-                              y_predicted_soft=y_predicted_soft,
+                              y_predicted_soft=y_predicted_soft,  # type: ignore
                               y_predicted_hard=y_predicted_hard)
         self.assertGreaterEqual(scores.auc, 0)
         self.assertLessEqual(scores.auc, 1)
@@ -319,10 +355,10 @@ class TestMlHandlers(TestCase):
                                      msg=f'Failed {name}[{idx}] vector no longer than data set')
 
     def test_add_preprocessor_sparse_data(self):
-        X_sparse = sparse.rand(m=1000, n=100, density=0.01, format='coo')
-        y = np.random.randint(0, 1, size=(100,))
-        dataset = Bunch(data=X_sparse, target=y)
-        engine = target.MLExperimentEngine(self._default_config, dataset=dataset, dataset_base_name='random_sparse_data')
+        dataset = self.all_datasets['sparse'].dataset
+        engine = target.MLExperimentEngine(self._default_config,
+                                           dataset=dataset,
+                                           dataset_base_name='random_sparse_data')
         self.assertEquals(engine.preprocessors, [])
         engine.set_model_by_name('SVC')
         engine.setup_model_pre_post_processors(dataset=dataset)
@@ -331,9 +367,7 @@ class TestMlHandlers(TestCase):
         self.assertIsInstance(engine.preprocessors[0][1], MaxAbsScaler)
 
     def test_add_preprocessor_requires_nonnegative_data(self):
-        X = np.random.random_sample(size=(30, 10))
-        y = np.random.randint(0, 1, size=(10,))
-        dataset = Bunch(data=X, target=y)
+        dataset = self._default_nonnegative_dataset
         engine = target.MLExperimentEngine(self._default_config, dataset=dataset, dataset_base_name='random_nonneg_data')
         self.assertEquals(engine.preprocessors, [])
         engine.set_model_by_name('CategoricalNB')
@@ -351,6 +385,9 @@ class TestMlHandlers(TestCase):
         self.assertEquals(len(engine.preprocessors), 1)
         self.assertEquals(engine.preprocessors[0][0], 'ScaleData:Std')
         self.assertIsInstance(engine.preprocessors[0][1], StandardScaler)
+
+    def test_engine_end_to_end_all_classifiers(self):
+        pass
 
 
 if __name__ == '__main__':

@@ -50,6 +50,8 @@ MODEL_REGISTRY: Dict[str, Callable] = {
     'RidgeClassifierCV': linear_model.RidgeClassifierCV,
     'SGDClassifier': linear_model.SGDClassifier,
     'SVC': svm._classes.SVC,
+    # Ensemble classifiers require specification of the sub-classifers. That's fine, but
+    # omit for first draft.
     # 'StackingClassifier': ensemble.StackingClassifier,
     # 'VotingClassifier': ensemble.VotingClassifier,
     'GaussianProcessClassifier': gaussian_process.GaussianProcessClassifier,
@@ -62,6 +64,8 @@ MODEL_REGISTRY: Dict[str, Callable] = {
     'LogisticRegressionCV': linear_model.LogisticRegressionCV,
     'MLPClassifier': neural_network.MLPClassifier,
     'MultinomialNB': naive_bayes.MultinomialNB,
+    # NearestCentroid model doesn't define a soft classification method, so
+    # not clear how to use it for thresholded performance metrics.
     # 'NearestCentroid': neighbors.NearestCentroid,
     'NuSVC': svm.NuSVC,
 }

@@ -58,7 +58,7 @@ class DataSplitHandler(object):
 
 class ScoreHandler(ABC):
     """Encapsulates behavior of how to generate scores for different types of output variables.
-    
+
     We have different logic for scoring binary vs multiclass data. (And probably binary one-vs-all
     still to come.) This class hierarchy factors those cases into separate classes. See:
       - BinaryScoreHandler
@@ -182,7 +182,7 @@ class MLExperimentEngine(object):
 
     @staticmethod
     def model_requires_nonnegative(model: BaseEstimator):
-        return model._get_tags().get('requires_positive_X', False)
+        return model._get_tags().get('requires_positive_X', False)  # type: ignore
 
     def setup_model_pre_post_processors(self, dataset: Bunch):
         if self.model is None:

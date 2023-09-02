@@ -6,20 +6,16 @@ from joblib import dump  # type: ignore
 from logging.config import dictConfig
 from pathlib import Path
 from sklearn.utils import Bunch
-from sklearn.utils.multiclass import type_of_target
 from sys import argv
-from typing import Union, List, Mapping, Iterable
+from typing import Mapping, Iterable
 import json
 import logging
-import numpy as np
-import sklearn.metrics as metrics
 import traceback
 
 from auc_measurement.config import Config, load_config
 from auc_measurement.dir_stack import dir_stack_push
 from auc_measurement.ml_handlers import MLExperimentEngine, ExperimentConfigurationException, ScoreHandler
 from auc_measurement.registries import DATA_LOADER_REGISTRY
-from auc_measurement.scores import Scores
 from auc_measurement.version import get_version, get_git_info
 
 
@@ -49,7 +45,11 @@ def fully_expand_params(params):
     Args:
         params (Any): Object returned by estimator.get_params()
     """
-    if isinstance(params, str) or isinstance(params, int) or isinstance(params, float) or isinstance(params, bool) or params is None:
+    if (isinstance(params, str) or
+        isinstance(params, int) or
+        isinstance(params, float) or
+        isinstance(params, bool) or
+            params is None):
         return params
     if hasattr(params, 'get_params'):
         return fully_expand_params(params.get_params(deep=False))
@@ -163,7 +163,7 @@ def main(config=None):
             run_all_expts(config=config)
         except Exception as e:
             logging.error(f'Fatal exception in execution: {e}')
-            logging.error(f'Stack trace:')
+            logging.error('Stack trace:')
             for frame in traceback.format_tb(e.__traceback__):
                 logging.error(f'{frame}')
             raise e
