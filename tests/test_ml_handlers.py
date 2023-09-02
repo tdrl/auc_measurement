@@ -50,17 +50,14 @@ class TestMlHandlers(TestCase):
         # each class after CV splitting).
         X_bin, y_bin = make_classification(n_samples=40, n_features=20, n_classes=2)
         X_sparse = sparse.rand(m=1000, n=100, density=0.01, format='coo')
-        y_sparse = np.random.randint(0, 2, size=(100,))
+        y_sparse = np.random.randint(0, 2, size=(X_sparse.shape[0],))
         multi_n_classes = 7
         X_multi, y_multi = make_classification(n_samples=100,
                                                n_classes=multi_n_classes,
                                                n_features=11,
                                                n_informative=9)
-        self._default_nonnegative_rows = 40
-        self._default_nonnegative_features = 10
-        X_nonnegative = np.random.random_sample(size=(self._default_nonnegative_rows,
-                                                      self._default_nonnegative_features))
-        y_nonnegative = np.random.randint(0, 2, size=(self._default_nonnegative_rows,))
+        X_nonnegative = np.random.random_sample(size=(40, 10))
+        y_nonnegative = np.random.randint(0, 2, size=(X_nonnegative.shape[0],))
         self.binary_data = DatasetDefinition(name='binary',
                                              n_rows=X_bin.shape[0],
                                              n_features=X_bin.shape[1],
@@ -404,7 +401,25 @@ class TestMlHandlers(TestCase):
         self.assertIsInstance(engine.preprocessors[0][1], StandardScaler)
 
     def test_engine_end_to_end_all_classifiers(self):
-        pass
+        for d_name, d in self.all_datasets.items():
+            dataset = d.dataset
+            engine = target.MLExperimentEngine(self._default_config,
+                                               dataset=dataset,
+                                               dataset_base_name=d_name)
+            for m in target.MODEL_REGISTRY:
+                engine.set_model_by_name(m)
+                engine.setup_model_pre_post_processors(dataset=dataset)
+                # This should not raise an error.
+                try:
+                    engine.fit_model(d.X, d.y)
+                except TypeError as e:
+                    raise TypeError(f'Blew up model data input expectations for model={m}, data={d_name}', e)
+                yhat_hard = engine.predict_hard(d.X)
+                yhat_soft = engine.predict_soft(d.X)
+                self.assertEquals(yhat_hard.shape[0], d.n_rows)
+                self.assertEquals(yhat_hard.shape, d.y.shape)
+                self.assertEquals(yhat_soft.shape[0], d.n_rows)
+                self.assertEquals(yhat_soft.shape[1], d.n_classes)
 
 
 if __name__ == '__main__':
