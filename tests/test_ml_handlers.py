@@ -4,10 +4,11 @@ from unittest import TestCase, main, skip
 from pathlib import Path
 from tempfile import mkdtemp
 from os import chdir
+from scipy import sparse
 from shutil import rmtree
-from sklearn import tree, svm
+from sklearn import tree, svm, naive_bayes
 from sklearn.datasets import make_classification
-from sklearn.preprocessing import normalize
+from sklearn.preprocessing import normalize, MaxAbsScaler, MinMaxScaler, StandardScaler
 from sklearn.utils import Bunch
 import numpy as np
 from numpy.testing import assert_array_almost_equal
@@ -101,25 +102,27 @@ class TestMlHandlers(TestCase):
             handlers.predict_soft(self._default_binary_dataset.data)
 
     def test_predict_all_classifiers_binary(self):
-        handlers = target.MLExperimentEngine(config=self._default_config,
-                                             dataset=self._default_binary_dataset,
-                                             dataset_base_name='testData')
+        engine = target.MLExperimentEngine(config=self._default_config,
+                                           dataset=self._default_binary_dataset,
+                                           dataset_base_name='testData')
         for model_name in target.MODEL_REGISTRY:
-            handlers.set_model_by_name(model_name)
-            handlers.fit_model(self._default_binary_dataset.data, self._default_binary_dataset.target)
-            yhat = handlers.predict_soft(self._default_binary_dataset.data)
+            engine.set_model_by_name(model_name)
+            engine.setup_model_pre_post_processors(self._default_binary_dataset)
+            engine.fit_model(self._default_binary_dataset.data, self._default_binary_dataset.target)
+            yhat = engine.predict_soft(self._default_binary_dataset.data)
             self.assertEqual(yhat.shape, (self._default_binary_rows, 2), f'Failed on model = {model_name}')
             assert_array_almost_equal(yhat.sum(axis=1), np.ones((self._default_binary_rows,)),
                                       err_msg=f'Failed on model = {model_name}')
 
     def test_predict_all_classifiers_multiclass(self):
-        handlers = target.MLExperimentEngine(config=self._default_config,
-                                             dataset=self._default_multiclass_dataset,
-                                             dataset_base_name='testData')
+        engine = target.MLExperimentEngine(config=self._default_config,
+                                           dataset=self._default_multiclass_dataset,
+                                           dataset_base_name='testData')
         for model_name in target.MODEL_REGISTRY:
-            handlers.set_model_by_name(model_name)
-            handlers.fit_model(self._default_multiclass_dataset.data, self._default_multiclass_dataset.target)
-            yhat = handlers.predict_soft(self._default_multiclass_dataset.data)
+            engine.set_model_by_name(model_name)
+            engine.setup_model_pre_post_processors(self._default_multiclass_dataset)
+            engine.fit_model(self._default_multiclass_dataset.data, self._default_multiclass_dataset.target)
+            yhat = engine.predict_soft(self._default_multiclass_dataset.data)
             self.assertEqual(yhat.shape, (self._default_multiclass_rows, self._default_multiclass_n_classes),
                              f'Failed on model = {model_name}')
             assert_array_almost_equal(yhat.sum(axis=1), np.ones((self._default_multiclass_rows,)),
@@ -314,6 +317,40 @@ class TestMlHandlers(TestCase):
                                    msg=f'Failed length of {name}[{idx}] vector is at least 2')
                 self.assertLessEqual(r.shape[0], self._default_multiclass_rows + 1,
                                      msg=f'Failed {name}[{idx}] vector no longer than data set')
+
+    def test_add_preprocessor_sparse_data(self):
+        X_sparse = sparse.rand(m=1000, n=100, density=0.01, format='coo')
+        y = np.random.randint(0, 1, size=(100,))
+        dataset = Bunch(data=X_sparse, target=y)
+        engine = target.MLExperimentEngine(self._default_config, dataset=dataset, dataset_base_name='random_sparse_data')
+        self.assertEquals(engine.preprocessors, [])
+        engine.set_model_by_name('SVC')
+        engine.setup_model_pre_post_processors(dataset=dataset)
+        self.assertEquals(len(engine.preprocessors), 1)
+        self.assertEquals(engine.preprocessors[0][0], 'ScaleData:MaxAbs')
+        self.assertIsInstance(engine.preprocessors[0][1], MaxAbsScaler)
+
+    def test_add_preprocessor_requires_nonnegative_data(self):
+        X = np.random.random_sample(size=(30, 10))
+        y = np.random.randint(0, 1, size=(10,))
+        dataset = Bunch(data=X, target=y)
+        engine = target.MLExperimentEngine(self._default_config, dataset=dataset, dataset_base_name='random_nonneg_data')
+        self.assertEquals(engine.preprocessors, [])
+        engine.set_model_by_name('CategoricalNB')
+        engine.setup_model_pre_post_processors(dataset=dataset)
+        self.assertEquals(len(engine.preprocessors), 1)
+        self.assertEquals(engine.preprocessors[0][0], 'ScaleData:MinMax')
+        self.assertIsInstance(engine.preprocessors[0][1], MinMaxScaler)
+
+    def test_add_preprocessor_general(self):
+        dataset = self._default_multiclass_dataset
+        engine = target.MLExperimentEngine(self._default_config, dataset=dataset, dataset_base_name='random_geneal_data')
+        self.assertEquals(engine.preprocessors, [])
+        engine.set_model_by_name('SVC')
+        engine.setup_model_pre_post_processors(dataset=dataset)
+        self.assertEquals(len(engine.preprocessors), 1)
+        self.assertEquals(engine.preprocessors[0][0], 'ScaleData:Std')
+        self.assertIsInstance(engine.preprocessors[0][1], StandardScaler)
 
 
 if __name__ == '__main__':

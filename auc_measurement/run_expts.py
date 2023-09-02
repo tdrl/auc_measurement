@@ -1,19 +1,19 @@
 """Main experiment runner rig.
 """
 
-from pathlib import Path
-from sys import argv
-import json
-from typing import Union, List, Mapping, Iterable
-import logging
-from logging.config import dictConfig
-import numpy as np
-from sklearn.utils import Bunch
-from sklearn.preprocessing import StandardScaler, LabelBinarizer
-import sklearn.metrics as metrics
-from sklearn.utils.multiclass import type_of_target
-from joblib import dump  # type: ignore
 from datetime import datetime
+from joblib import dump  # type: ignore
+from logging.config import dictConfig
+from pathlib import Path
+from sklearn.utils import Bunch
+from sklearn.utils.multiclass import type_of_target
+from sys import argv
+from typing import Union, List, Mapping, Iterable
+import json
+import logging
+import numpy as np
+import sklearn.metrics as metrics
+import traceback
 
 from auc_measurement.config import Config, load_config
 from auc_measurement.dir_stack import dir_stack_push
@@ -99,8 +99,11 @@ def run_single_expt(config: Config, expt_handlers: MLExperimentEngine, dataset: 
                 logging.info(f'  Model {model_name} already done; skipping.')
                 continue
             expt_handlers.set_model_by_name(model_name=model_name)
+            expt_handlers.setup_model_pre_post_processors(dataset=dataset)
             with open('model_params.json', 'w') as params_out:
                 json.dump(fully_expand_params(expt_handlers.model), params_out, indent=2)  # type:ignore
+            with open('preprocessing.txt', 'w') as preproc_out:
+                preproc_out.writelines([p[0] for p in expt_handlers.preprocessors])
             run_one_model(X=X, y=y, expt_handlers=expt_handlers)
             mark_complete()
     mark_complete()
@@ -116,8 +119,6 @@ def run_one_dataset(config: Config, expt_handlers: MLExperimentEngine, dataset_n
             descr_out.write(dataset['DESCR'])
         with open('dataset_name.txt', 'w') as name_out:
             name_out.write(dataset_name + '\n')
-        with open('preprocessing.txt', 'w') as preproc_out:
-            preproc_out.writelines([p[0] for p in expt_handlers.preprocessors])
         run_single_expt(config=config, expt_handlers=expt_handlers, dataset=dataset)
         mark_complete()
 
@@ -128,7 +129,6 @@ def run_all_expts(config: Config):
         dataset = DATA_LOADER_REGISTRY[dataset_name]()
         try:
             expt_handlers = MLExperimentEngine(config=config, dataset=dataset, dataset_base_name=dataset_name)
-            expt_handlers.add_preprocessor('ScaleData', StandardScaler())
             run_one_dataset(config, expt_handlers, dataset_name, dataset)
         except ExperimentConfigurationException:
             pass
@@ -159,7 +159,14 @@ def main(config=None):
             return
         with open('config.json', 'w') as config_out:
             config_out.write(config.to_json(indent=2))  # type: ignore
-        run_all_expts(config=config)
+        try:
+            run_all_expts(config=config)
+        except Exception as e:
+            logging.error(f'Fatal exception in execution: {e}')
+            logging.error(f'Stack trace:')
+            for frame in traceback.format_tb(e.__traceback__):
+                logging.error(f'{frame}')
+            raise e
         mark_complete()
 
 

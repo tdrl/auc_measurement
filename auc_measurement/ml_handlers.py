@@ -17,11 +17,12 @@ encapsulate the case-specific behaviors.
 from abc import ABC, abstractmethod
 import logging
 import numpy as np
+from scipy.sparse import issparse
 from sklearn.base import TransformerMixin, BaseEstimator
 from sklearn.calibration import CalibratedClassifierCV
 import sklearn.metrics as metrics
 from sklearn.model_selection import StratifiedShuffleSplit
-from sklearn.preprocessing import LabelBinarizer
+from sklearn.preprocessing import LabelBinarizer, StandardScaler, MaxAbsScaler, MinMaxScaler
 from sklearn.pipeline import Pipeline
 from sklearn.utils import Bunch
 from sklearn.utils.multiclass import type_of_target
@@ -179,6 +180,29 @@ class MLExperimentEngine(object):
     def remove_preprocessor(self, preprocessor_name: str):
         self.preprocessors = [x for x in self.preprocessors if x[0] != preprocessor_name]
 
+    @staticmethod
+    def model_requires_nonnegative(model: BaseEstimator):
+        return model._get_tags().get('requires_positive_X', False)
+
+    def setup_model_pre_post_processors(self, dataset: Bunch):
+        if self.model is None:
+            raise ExperimentConfigurationException('Oooh! Somebody tried to add model preprocessors before '
+                                                   'setting the model! Can''t have that!')
+        X = dataset.data
+        if issparse(X):
+            logging.info('  Feature data matrix looks sparse. Using a MaxAbsScaler for data preprocessing.')
+            self.add_preprocessor('ScaleData:MaxAbs', MaxAbsScaler())
+        else:
+            logging.info('  Feature data matrix looks dense.')
+            if self.model_requires_nonnegative(model=self.model):
+                logging.info('  Model wants non-negative values; using MinMaxScaler')
+                self.add_preprocessor('ScaleData:MinMax', MinMaxScaler(feature_range=(0, 1)))
+            else:
+                logging.info('  Model is happy with negative values; using StandardScaler.')
+                self.add_preprocessor('ScaleData:Std', StandardScaler())
+        calibrated_model = self.maybe_add_calibrator(self.model)
+        self.model = Pipeline(self.preprocessors + [(f'Model_{self.model_name}', calibrated_model)])  # type: ignore
+
     def maybe_add_calibrator(self, base_model: BaseEstimator) -> BaseEstimator:
         if hasattr(base_model, 'predict_proba'):
             # Model knows how to predict probabilities natively. Doesn't need calibration.
@@ -200,16 +224,19 @@ class MLExperimentEngine(object):
                                           method=self.config.small_data.calibration_type)  # type: ignore
 
     def set_model_by_name(self, model_name: str):
+        self.preprocessors = []
         try:
             model = MODEL_REGISTRY[model_name](**self.config.models_to_test[model_name],
                                                random_state=self.config.random_seed)
+        except TypeError:
+            # Some models don't accept the random state argument. Try again without it.
+            model = MODEL_REGISTRY[model_name](**self.config.models_to_test[model_name])
         except KeyError:
             raise ExperimentConfigurationException(f"You asked for a model named '{model_name}', but that name "
                                                    f"isn't registered in the known model names registry. See "
                                                    f"registries.py for known model names.")
+        self.model = model
         self.model_name = model_name
-        calibrated_model = self.maybe_add_calibrator(model)
-        self.model = Pipeline(self.preprocessors + [(f'Model_{model_name}', calibrated_model)])  # type: ignore
 
     def fit_model(self, X: np.ndarray, y: np.ndarray):
         if self.model is None:

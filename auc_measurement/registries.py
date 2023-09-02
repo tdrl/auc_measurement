@@ -35,7 +35,7 @@ MODEL_REGISTRY: Dict[str, Callable] = {
     'AdaBoostClassifier': ensemble.AdaBoostClassifier,
     'BaggingClassifier': ensemble.BaggingClassifier,
     'BernoulliNB': naive_bayes.BernoulliNB,
-    'CategoricalNB': naive_bayes.CategoricalNB,
+    'CategoricalNB': naive_bayes.CategoricalNB,  # Note: Requires non-negative feature data.
     'ComplementNB': naive_bayes.ComplementNB,
     'DecisionTreeClassifier': tree.DecisionTreeClassifier,
     'ExtraTreeClassifier': tree.ExtraTreeClassifier,
@@ -50,8 +50,8 @@ MODEL_REGISTRY: Dict[str, Callable] = {
     'RidgeClassifierCV': linear_model.RidgeClassifierCV,
     'SGDClassifier': linear_model.SGDClassifier,
     'SVC': svm._classes.SVC,
-    'StackingClassifier': ensemble.StackingClassifier,
-    'VotingClassifier': ensemble.VotingClassifier,
+    # 'StackingClassifier': ensemble.StackingClassifier,
+    # 'VotingClassifier': ensemble.VotingClassifier,
     'GaussianProcessClassifier': gaussian_process.GaussianProcessClassifier,
     'GradientBoostingClassifier': ensemble.GradientBoostingClassifier,
     'HistGradientBoostingClassifier': ensemble.HistGradientBoostingClassifier,
@@ -62,7 +62,7 @@ MODEL_REGISTRY: Dict[str, Callable] = {
     'LogisticRegressionCV': linear_model.LogisticRegressionCV,
     'MLPClassifier': neural_network.MLPClassifier,
     'MultinomialNB': naive_bayes.MultinomialNB,
-    'NearestCentroid': neighbors.NearestCentroid,
+    # 'NearestCentroid': neighbors.NearestCentroid,
     'NuSVC': svm.NuSVC,
 }
 

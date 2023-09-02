@@ -1,5 +1,5 @@
 {
-    "experiments_output_dir": "~/private/docs/research/auc_measurement/experiment_results/${TIMESTAMP}",
+    "experiments_output_dir": "~/private/docs/research/auc_measurement/experiment_results/full_data_run/${TIMESTAMP}",
     "logging_config_file": "~/private/src/python/auc_measurement/experiment_configs/default_logging_config.json",
     "datasets": [
         "breast_cancer",
@@ -18,8 +18,6 @@
         "AdaBoostClassifier": {},
         "BaggingClassifier": {},
         "BernoulliNB": {},
-        "CategoricalNB": {},
-        "ComplementNB": {},
         "DecisionTreeClassifier": {},
         "ExtraTreeClassifier": {},
         "ExtraTreesClassifier": {},
@@ -27,14 +25,12 @@
         "PassiveAggressiveClassifier": {},
         "Perceptron": {},
         "QuadraticDiscriminantAnalysis": {},
-        "RadiusNeighborsClassifier": {},
+        "RadiusNeighborsClassifier": { "outlier_label": "most_frequent" },
         "RandomForestClassifier": {},
         "RidgeClassifier": {},
         "RidgeClassifierCV": {},
         "SGDClassifier": {},
         "SVC": {},
-        "StackingClassifier": {},
-        "VotingClassifier": {},
         "GaussianProcessClassifier": {},
         "GradientBoostingClassifier": {},
         "HistGradientBoostingClassifier": {},
@@ -44,8 +40,6 @@
         "LogisticRegression": {},
         "LogisticRegressionCV": {},
         "MLPClassifier": {},
-        "MultinomialNB": {},
-        "NearestCentroid": {},
         "NuSVC": {}
     },
     "small_data": {
