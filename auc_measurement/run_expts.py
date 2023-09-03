@@ -2,12 +2,12 @@
 """
 
 from datetime import datetime
-from joblib import dump  # type: ignore
+from joblib import dump as dump_joblib  # type: ignore
 from logging.config import dictConfig
 from pathlib import Path
 from sklearn.utils import Bunch
 from sys import argv
-from typing import Mapping, Iterable
+from typing import Mapping, Iterable, Union, List
 import json
 import logging
 import traceback
@@ -19,14 +19,26 @@ from auc_measurement.registries import DATA_LOADER_REGISTRY
 from auc_measurement.version import get_version, get_git_info
 
 
+def dump_json(filename: Union[str, Path], obj: object):
+    """Helper function: Save obj as JSON in specified file."""
+    with open(filename, 'w') as data_out:
+        json.dump(obj=obj, fp=data_out, indent=2)
+
+
+def dump_text(filename: Union[str, Path], text: Union[str, List[str]]):
+    if isinstance(text, str):
+        text = [text]
+    with open(filename, 'w') as lines_out:
+        lines_out.writelines((line + '\n' for line in text))
+
+
 def mark_complete():
     completion_data = {
         'version': get_version(),
         'timestamp': datetime.utcnow().strftime('%FT%TZ'),
         'git-info': get_git_info(),
     }
-    with open('.complete', 'w') as c_out:
-        json.dump(completion_data, c_out)
+    dump_json('.complete', completion_data)
 
 
 def is_complete() -> bool:
@@ -68,21 +80,20 @@ def run_one_model(X, y, expt_handlers: MLExperimentEngine):
                 logging.info(f'    split {idx} already done; skipping.')
                 continue
             logging.info(f'    Fitting model {expt_handlers.model_name}...')
-            dump(train, 'train_indices.joblib')
-            dump(test, 'test_indices.joblib')
+            dump_joblib(train, 'train_indices.joblib')
+            dump_joblib(test, 'test_indices.joblib')
             expt_handlers.fit_model(X[train], y[train])
             logging.info('    Done.')
-            dump(expt_handlers.model, 'model.joblib')
-            dump(y[test], 'ground_truth_labels.joblib')
+            dump_joblib(expt_handlers.model, 'model.joblib')
+            dump_joblib(y[test], 'ground_truth_labels.joblib')
             logging.info('    Predicting on test fold...')
             y_predicted_soft = expt_handlers.predict_soft(X=X[test])
-            dump(y_predicted_soft, 'predictions_soft.joblib')
+            dump_joblib(y_predicted_soft, 'predictions_soft.joblib')
             y_predicted_hard = expt_handlers.predict_hard(X=X[test])
-            dump(y_predicted_hard, 'predictions_hard.joblib')
+            dump_joblib(y_predicted_hard, 'predictions_hard.joblib')
             scorer = ScoreHandler.score_handler_factory(y[test])
             scores = scorer.score(y_true=y[test], y_predicted_soft=y_predicted_soft, y_predicted_hard=y_predicted_hard)
-            with open('final_scores.json', 'w') as scores_out:
-                scores_out.write(scores.to_json(indent=2))  # type: ignore
+            dump_text('final_scores.json', scores.to_json(indent=2))  # type: ignore
             logging.info('    Done.')
             mark_complete()
 
@@ -99,11 +110,16 @@ def run_single_expt(config: Config, expt_handlers: MLExperimentEngine, dataset: 
                 logging.info(f'  Model {model_name} already done; skipping.')
                 continue
             expt_handlers.set_model_by_name(model_name=model_name)
+            if not expt_handlers.model_data_are_compatible(dataset=dataset):
+                logging.warning(f"Model {model_name} can't handle sparse data in data "
+                                f"set {expt_handlers.dataset_base_name} (lame!). Skipping.")
+                mark_complete()
+                dump_text('.failed',
+                          f'Model {model_name} incompatible with data set {expt_handlers.dataset_base_name}')
+                continue
             expt_handlers.setup_model_pre_post_processors(dataset=dataset)
-            with open('model_params.json', 'w') as params_out:
-                json.dump(fully_expand_params(expt_handlers.model), params_out, indent=2)  # type:ignore
-            with open('preprocessing.txt', 'w') as preproc_out:
-                preproc_out.writelines([p[0] for p in expt_handlers.preprocessors])
+            dump_json('model_params.json', fully_expand_params(expt_handlers.model))
+            dump_text('preprocessing.txt', [p[0] for p in expt_handlers.preprocessors])
             run_one_model(X=X, y=y, expt_handlers=expt_handlers)
             mark_complete()
     mark_complete()
@@ -115,10 +131,8 @@ def run_one_dataset(config: Config, expt_handlers: MLExperimentEngine, dataset_n
             logging.info(f'  Dataset {dataset_name} already done; skipping.')
             return
         logging.info(f'  Created experiment directory for dataset {dataset_name} at {expt_dir}')
-        with open('dataset_descr.txt', 'w') as descr_out:
-            descr_out.write(dataset['DESCR'])
-        with open('dataset_name.txt', 'w') as name_out:
-            name_out.write(dataset_name + '\n')
+        dump_text('dataset_descr.txt', dataset['DESCR'])
+        dump_text('dataset_name.txt', dataset_name)
         run_single_expt(config=config, expt_handlers=expt_handlers, dataset=dataset)
         mark_complete()
 
@@ -157,8 +171,7 @@ def main(config=None):
         if is_complete():
             logging.info('All experiments already marked done. Stopping immediately.')
             return
-        with open('config.json', 'w') as config_out:
-            config_out.write(config.to_json(indent=2))  # type: ignore
+        dump_text('config.json', config.to_json(indent=2))
         try:
             run_all_expts(config=config)
         except Exception as e:

@@ -17,8 +17,8 @@ encapsulate the case-specific behaviors.
 from abc import ABC, abstractmethod
 import logging
 import numpy as np
-from scipy.sparse import issparse
-from sklearn.base import TransformerMixin, BaseEstimator
+from scipy.sparse import issparse, rand as rand_sparse
+from sklearn.base import TransformerMixin, BaseEstimator, clone
 from sklearn.calibration import CalibratedClassifierCV
 import sklearn.metrics as metrics
 from sklearn.model_selection import StratifiedShuffleSplit
@@ -183,6 +183,37 @@ class MLExperimentEngine(object):
     @staticmethod
     def model_requires_nonnegative(model: BaseEstimator):
         return model._get_tags().get('requires_positive_X', False)  # type: ignore
+
+    def model_data_are_compatible(self, dataset: Bunch) -> bool:
+        """Check whether the model can take this kind/shape of data.
+
+        Some models are incompatible with some data types. In particular, a number of
+        models can't handle sparse data and will throw a TypeError when you call .fit().
+        This checks for this case, and any other fundamental incompatibilities we may
+        discover. This does not include things that can be tweaked up with preprocessing
+        (e.g., range shift to be nonnegative).
+
+        Args:
+            dataset (Bunch): Data to check against currently set model in the engine.
+
+        Returns:
+            bool: True iff model can potentially fit this data.
+        """
+        if self.model is None:
+            raise ExperimentConfigurationException("Can't check whether a model is compatible with data "
+                                                   "when you haven't set a model yet! Shame on you.")
+        # For the moment, sparsity is the only data condition we can't handle with
+        # preprocessing.
+        if not issparse(dataset.data):
+            return True
+        local_model = clone(self.model)
+        X = rand_sparse(20, 5, format=dataset.data.getformat(), density=0.5)
+        y = np.concatenate([np.ones(shape=(10,)), np.zeros(shape=(10,))], axis=0)
+        try:
+            local_model.fit(X, y)
+            return True
+        except TypeError:
+            return False
 
     def setup_model_pre_post_processors(self, dataset: Bunch):
         if self.model is None:

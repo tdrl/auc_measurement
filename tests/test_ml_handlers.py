@@ -6,7 +6,7 @@ from tempfile import mkdtemp
 from os import chdir
 from scipy import sparse
 from shutil import rmtree
-from sklearn import tree, svm, naive_bayes
+from sklearn import tree, svm
 from sklearn.datasets import make_classification
 from sklearn.preprocessing import normalize, MaxAbsScaler, MinMaxScaler, StandardScaler
 from sklearn.utils import Bunch
@@ -400,6 +400,22 @@ class TestMlHandlers(TestCase):
         self.assertEquals(engine.preprocessors[0][0], 'ScaleData:Std')
         self.assertIsInstance(engine.preprocessors[0][1], StandardScaler)
 
+    def test_model_data_are_compatible_dense_matrix(self):
+        for name, dataset in {k: v.dataset for k, v in self.all_datasets.items() if k != 'sparse'}.items():
+            engine = target.MLExperimentEngine(self._default_config,
+                                               dataset=dataset,
+                                               dataset_base_name=name)
+            engine.set_model_by_name('SVC')
+            self.assertTrue(engine.model_data_are_compatible(dataset=dataset))
+
+    def test_model_data_are_compatible_sparse_matrix(self):
+        dataset = self.sparse_data.dataset
+        engine = target.MLExperimentEngine(self._default_config,
+                                           dataset=dataset,
+                                           dataset_base_name='sparse')
+        engine.set_model_by_name('GaussianNB')  # Doesn't handle sparse.
+        self.assertFalse(engine.model_data_are_compatible(dataset=dataset))
+
     def test_engine_end_to_end_all_classifiers(self):
         for d_name, d in self.all_datasets.items():
             dataset = d.dataset
@@ -408,6 +424,8 @@ class TestMlHandlers(TestCase):
                                                dataset_base_name=d_name)
             for m in target.MODEL_REGISTRY:
                 engine.set_model_by_name(m)
+                if not engine.model_data_are_compatible(dataset=dataset):
+                    continue
                 engine.setup_model_pre_post_processors(dataset=dataset)
                 # This should not raise an error.
                 try:
